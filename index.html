@@ -1,0 +1,2803 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#176b59" />
+<title>마진킷 (MarginKit) — 온라인 셀러 판매 실수익 & 마진 분석기</title>
+<meta name="description" content="스마트스토어, 쿠팡 등 오픈마켓 정산 파일과 원가를 연결해 상품별 실제 손익과 마진율을 즉시 분석하세요. 데이터는 브라우저 내부에서만 안전하게 처리됩니다." />
+
+<!-- Amplitude Analytics (정산 파일은 브라우저에만 유지, 사용 지표만 전송) -->
+<script src="https://cdn.amplitude.com/script/b2e96892ba576e2c846c4fbe57e4c494.js"></script>
+<script>
+  try {
+    if (window.amplitude) {
+      // Session Replay는 화면·입력 캡처 위험이 있어 기본 비활성
+      window.amplitude.init('b2e96892ba576e2c846c4fbe57e4c494', {
+        fetchRemoteConfig: true,
+        autocapture: true,
+        defaultTracking: { sessions: true, pageViews: true, formInteractions: false, fileDownloads: false }
+      });
+    }
+  } catch (e) { /* analytics optional */ }
+</script>
+
+<!-- SheetJS (Excel 및 고급 파싱) -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg: #f6f8fb;
+  --panel: #ffffff;
+  --ink: #17212f;
+  --ink-secondary: #4a5568;
+  --muted: #718096;
+  --line: #e2e8f0;
+  --line-light: #edf2f7;
+  --primary: #176b59;
+  --primary-hover: #125446;
+  --primary2: #e8f5f0;
+  --blue: #3182ce;
+  --bluebg: #ebf8ff;
+  --red: #e53e3e;
+  --redbg: #fff5f5;
+  --amber: #d69e2e;
+  --amberbg: #fffaf0;
+  --purple: #805ad5;
+  --purplebg: #faf5ff;
+  --shadow: 0 4px 20px rgba(15, 23, 42, 0.05);
+  --shadow-lg: 0 10px 30px rgba(15, 23, 42, 0.1);
+  --radius: 14px;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", Roboto, sans-serif;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+.app { min-height: 100vh; display: flex; flex-direction: column; }
+
+/* Topbar */
+.topbar {
+  height: 66px;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  text-decoration: none;
+  color: var(--ink);
+}
+.brandmark {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #1d836e 0%, #115746 100%);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 900;
+  font-size: 18px;
+  box-shadow: 0 4px 10px rgba(23, 107, 89, 0.25);
+}
+.brand small {
+  display: block;
+  color: #a0aec0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  margin-top: 1px;
+}
+.top-actions { display: flex; gap: 10px; align-items: center; }
+.privacy-pill {
+  font-size: 12px;
+  color: var(--primary);
+  background: var(--primary2);
+  padding: 7px 13px;
+  border-radius: 999px;
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  font-weight: 600;
+}
+.privacy-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 100%;
+  background: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+}
+
+/* Layout */
+.layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  max-width: 1600px;
+  margin: 0 auto;
+  width: 100%;
+  flex: 1;
+}
+.sidebar {
+  padding: 24px 16px;
+  border-right: 1px solid var(--line);
+  background: #fcfdfe;
+}
+.nav-title {
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  color: #a0aec0;
+  font-weight: 800;
+  padding: 12px 12px 6px;
+  text-transform: uppercase;
+}
+.nav-item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 13px;
+  border-radius: 10px;
+  text-align: left;
+  color: #4a5568;
+  margin: 3px 0;
+  font-weight: 600;
+  font-size: 13.5px;
+  transition: all 0.15s ease;
+}
+.nav-item:hover {
+  background: #f1f5f9;
+  color: var(--ink);
+}
+.nav-item .ico {
+  width: 20px;
+  text-align: center;
+  font-size: 16px;
+  color: #718096;
+}
+.nav-item.active {
+  color: var(--primary);
+  background: var(--primary2);
+  font-weight: 700;
+}
+.nav-item.active .ico { color: var(--primary); }
+.side-note {
+  margin: 28px 4px 0;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #4a5568;
+}
+.side-note strong {
+  display: block;
+  color: var(--ink);
+  font-size: 12.5px;
+  margin-bottom: 5px;
+}
+
+/* Main Area */
+.main { padding: 32px 40px 60px; min-width: 0; }
+.page { display: none; }
+.page.active { display: block; animation: fadeIn 0.15s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+.eyebrow {
+  color: var(--primary);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.heading-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+.heading-row h1 {
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: -0.8px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.heading-row p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+  max-width: 720px;
+}
+.heading-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* Buttons */
+.btn {
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  background: #fff;
+  border-radius: 10px;
+  padding: 9px 14px;
+  font-weight: 600;
+  font-size: 12.5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  user-select: none;
+}
+.btn:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+  transform: translateY(-1px);
+}
+.btn:active { transform: translateY(0); }
+.btn-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+.btn-primary:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(23, 107, 89, 0.25);
+}
+.btn-dark { background: #1e293b; color: #fff; border-color: #1e293b; }
+.btn-dark:hover { background: #0f172a; border-color: #0f172a; }
+.btn-danger { color: var(--red); background: #fff; border-color: #fecaca; }
+.btn-danger:hover { background: var(--redbg); border-color: var(--red); }
+.btn-sm { padding: 6px 10px; font-size: 11.5px; border-radius: 8px; }
+.btn-link { border: 0; background: transparent; color: var(--primary); padding: 4px; font-weight: 700; }
+.btn-link:hover { text-decoration: underline; background: transparent; transform: none; }
+
+/* Panels & Cards */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.panel-pad { padding: 22px 24px; }
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.panel-head h2, .panel-head h3 {
+  font-size: 15.5px;
+  margin: 0;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+}
+.panel-head p { font-size: 12.5px; color: var(--muted); margin: 4px 0 0; }
+
+/* KPI Grid */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.kpi {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.kpi-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #64748b;
+  font-weight: 700;
+}
+.kpi-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: #f1f5f9;
+  border-radius: 9px;
+  font-size: 14px;
+  color: #475569;
+}
+.kpi-val {
+  font-size: 25px;
+  font-weight: 800;
+  letter-spacing: -0.8px;
+  margin: 14px 0 4px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.kpi-val.positive { color: var(--primary); }
+.kpi-val.negative { color: var(--red); }
+.kpi-foot { font-size: 11.5px; color: #94a3b8; font-weight: 500; }
+.kpi-foot.good { color: var(--primary); }
+.kpi-foot.warn { color: var(--amber); }
+
+/* Layout Grids */
+.two-col {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.95fr);
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+/* Charts */
+.bar-chart-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.chart-toggle {
+  display: inline-flex;
+  background: #f1f5f9;
+  padding: 3px;
+  border-radius: 8px;
+  align-self: flex-start;
+}
+.chart-toggle button {
+  border: 0;
+  background: transparent;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+}
+.chart-toggle button.active {
+  background: #fff;
+  color: var(--primary);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  height: 195px;
+  padding: 16px 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.bar-col {
+  height: 100%;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+.bar-track {
+  height: 140px;
+  width: 100%;
+  max-width: 44px;
+  background: #f1f5f9;
+  border-radius: 6px 6px 2px 2px;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+  position: relative;
+}
+.bar-fill {
+  width: 100%;
+  background: #4ea892;
+  border-radius: 6px 6px 2px 2px;
+  min-height: 0;
+  transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.bar-fill.bar-loss { background: #f87171; }
+.bar-label {
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  text-align: center;
+}
+.bar-value {
+  font-size: 11px;
+  color: #334155;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Insights */
+.insights { display: flex; flex-direction: column; gap: 10px; }
+.insight {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border: 1px solid #edf2f7;
+  border-radius: 12px;
+}
+.insight-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--primary2);
+  color: var(--primary);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-weight: 800;
+  font-size: 14px;
+}
+.insight-icon.red { background: var(--redbg); color: var(--red); }
+.insight-icon.amber { background: var(--amberbg); color: var(--amber); }
+.insight-icon.blue { background: var(--bluebg); color: var(--blue); }
+.insight strong { display: block; font-size: 12.5px; margin: 1px 0 3px; color: var(--ink); }
+.insight p { color: var(--muted); font-size: 11.5px; line-height: 1.55; margin: 0; }
+
+/* Status Badges */
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+.chip-green { color: #166534; background: #dcfce7; }
+.chip-red { color: #991b1b; background: #fee2e2; }
+.chip-amber { color: #92400e; background: #fef3c7; }
+.chip-gray { color: #475569; background: #f1f5f9; }
+
+/* Tables */
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+}
+.data-table th {
+  background: #f8fafc;
+  color: #475569;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 12px 14px;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+  border-bottom: 1px solid var(--line);
+  user-select: none;
+}
+.data-table th.sortable { cursor: pointer; }
+.data-table th.sortable:hover { background: #f1f5f9; color: var(--primary); }
+.data-table th .sort-ico { font-size: 10px; margin-left: 4px; color: #94a3b8; }
+.data-table th.sorted .sort-ico { color: var(--primary); }
+.data-table td {
+  padding: 12px 14px;
+  border-top: 1px solid #f1f5f9;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.data-table td.num, .data-table th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.data-table tr:hover td { background: #f8fafc; }
+.product-name {
+  font-weight: 700;
+  color: var(--ink);
+  display: block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.product-code {
+  display: inline-block;
+  color: #94a3b8;
+  font-size: 10.5px;
+  margin-top: 2px;
+  font-family: monospace;
+}
+.money { font-variant-numeric: tabular-nums; }
+.positive { color: var(--primary); font-weight: 800; }
+.negative { color: var(--red); font-weight: 800; }
+
+/* Empty state */
+.empty-state { padding: 42px 20px; text-align: center; color: var(--muted); }
+.empty-icon {
+  width: 52px;
+  height: 52px;
+  background: var(--primary2);
+  color: var(--primary);
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 14px;
+  font-size: 22px;
+}
+.empty-state h3 { color: var(--ink); font-size: 15.5px; margin: 0 0 6px; }
+.empty-state p { font-size: 12.5px; line-height: 1.6; max-width: 460px; margin: 0 auto 18px; }
+
+/* Upload Cards */
+.upload-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 20px;
+}
+.upload-card { padding: 22px; }
+.upload-drop {
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 30px 18px;
+  text-align: center;
+  background: #fafcfd;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.upload-drop:hover, .upload-drop.dragover {
+  background: #f0fdf9;
+  border-color: #2dd4bf;
+  transform: translateY(-1px);
+}
+.upload-ico { font-size: 28px; margin-bottom: 8px; }
+.upload-drop strong { font-size: 13.5px; display: block; margin-bottom: 5px; color: var(--ink); }
+.upload-drop p { font-size: 11.5px; color: var(--muted); line-height: 1.6; margin: 0; }
+.file-status {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  font-size: 12px;
+  color: #166534;
+}
+.file-status .name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.file-status .remove {
+  border: 0;
+  background: transparent;
+  color: #dc2626;
+  font-weight: 900;
+  font-size: 16px;
+  padding: 0 4px;
+  cursor: pointer;
+}
+
+/* Forms & Selects */
+.input, .select {
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ink);
+  padding: 9px 12px;
+  width: 100%;
+  min-width: 0;
+  outline: none;
+  font-size: 13px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.input:focus, .select:focus {
+  border-color: #2dd4bf;
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.2);
+}
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 11.5px; font-weight: 700; color: #475569; }
+.mapping-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.mapping-section { margin-bottom: 22px; }
+.mapping-section h3 {
+  font-size: 13px;
+  margin: 0 0 12px;
+  color: #334155;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.map-hint {
+  margin-top: 16px;
+  background: #fffbeb;
+  border: 1px solid #fef3c7;
+  color: #92400e;
+  border-radius: 10px;
+  padding: 13px 15px;
+  font-size: 12px;
+  line-height: 1.65;
+}
+.cost-input {
+  width: 120px;
+  padding: 7px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  text-align: right;
+  font-size: 12.5px;
+}
+.cost-input:focus {
+  border-color: #2dd4bf;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.2);
+}
+
+/* Search & Filters */
+.search-row { display: flex; gap: 10px; align-items: center; }
+.search-box { max-width: 280px; position: relative; flex: 1; }
+.search-box input { padding-left: 32px; font-size: 12.5px; }
+.search-box span {
+  position: absolute;
+  left: 10px;
+  top: 9px;
+  color: #94a3b8;
+  font-size: 14px;
+}
+.filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.filter-btn {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #64748b;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  transition: all 0.15s ease;
+}
+.filter-btn:hover { background: #f8fafc; color: var(--ink); }
+.filter-btn.active {
+  background: var(--primary2);
+  border-color: #99f6e4;
+  color: var(--primary);
+}
+
+/* Alerts */
+.alert {
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 12px;
+  line-height: 1.65;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 14px 0;
+}
+.alert-info { color: #0369a1; background: #f0f9ff; border: 1px solid #bae6fd; }
+.alert-warn { color: #b45309; background: #fffbeb; border: 1px solid #fde68a; }
+.alert-error { color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; }
+
+/* Stepper */
+.stepper { display: flex; gap: 8px; margin-bottom: 22px; }
+.step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: #94a3b8;
+  font-weight: 700;
+}
+.step .n {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  font-size: 11px;
+}
+.step.active { color: var(--primary); }
+.step.active .n, .step.done .n {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+.step-sep { width: 32px; border-top: 1px solid #cbd5e1; align-self: center; }
+
+.footer {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 36px;
+  line-height: 1.7;
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  max-width: 380px;
+  background: #1e293b;
+  color: #fff;
+  padding: 13px 18px;
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  font-size: 12.5px;
+  z-index: 50;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+
+/* Modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 40;
+}
+.modal-backdrop.show { display: flex; animation: fadeIn 0.15s ease-out; }
+.modal {
+  max-width: 580px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 16px;
+  padding: 26px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+}
+.modal h2 { margin: 0 0 10px; font-size: 18px; letter-spacing: -0.4px; }
+.modal p { color: var(--ink-secondary); font-size: 12.5px; line-height: 1.7; margin: 0 0 16px; white-space: pre-line; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
+
+/* Helper classes */
+.hidden { display: none !important; }
+.badge { background: #f1f5f9; color: #475569; border-radius: 6px; padding: 4px 7px; font-size: 10px; font-weight: 800; letter-spacing: 0.5px; }
+.btn-icon { border: 0; background: transparent; padding: 4px 6px; color: #94a3b8; border-radius: 6px; cursor: pointer; }
+.btn-icon:hover { color: var(--red); background: var(--redbg); }
+
+/* Responsive */
+@media (max-width: 1150px) {
+  .layout { grid-template-columns: 210px minmax(0, 1fr); }
+  .main { padding: 26px 24px; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .two-col { grid-template-columns: 1fr; }
+  .mapping-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 768px) {
+  .topbar { height: 60px; padding: 0 16px; }
+  .privacy-pill { display: none; }
+  .layout { display: block; }
+  .sidebar {
+    padding: 8px 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    background: #fff;
+    position: sticky;
+    top: 60px;
+    z-index: 15;
+  }
+  .nav-title, .side-note { display: none; }
+  .nav-item { width: auto; white-space: nowrap; margin: 0; padding: 8px 12px; font-size: 12.5px; }
+  .nav-item .ico { font-size: 14px; width: auto; }
+  .main { padding: 20px 16px 50px; }
+  .heading-row { display: block; }
+  .heading-row h1 { font-size: 22px; }
+  .heading-actions { margin-top: 14px; }
+  .kpis { gap: 10px; }
+  .kpi-val { font-size: 20px; }
+  .upload-grid { grid-template-columns: 1fr; }
+  .mapping-grid { grid-template-columns: 1fr; }
+  .search-row { flex-direction: column; align-items: stretch; }
+  .search-box { max-width: none; }
+}
+
+.ov-bar{position:sticky;top:0;z-index:50;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;padding:10px 16px;background:rgba(5,8,16,.94);border-bottom:1px solid rgba(148,163,184,.22);backdrop-filter:blur(10px);color:#e8eef7;font-family:"Pretendard Variable",Pretendard,"Noto Sans KR",sans-serif;font-size:13px}
+.ov-bar a{color:#7dd3fc;text-decoration:none;font-weight:700}
+.ov-bar .ov-co{letter-spacing:.12em;font-weight:800;color:#fff}
+.ov-bar .ov-beta{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:rgba(251,191,36,.15);color:#fbbf24;border:1px solid rgba(251,191,36,.35);font-weight:700;font-size:11px}
+.ov-wrap{width:min(1100px,calc(100% - 32px));margin:0 auto}
+.ov-notice{margin:16px 0 0;padding:14px 16px;border-radius:14px;border:1px solid rgba(251,191,36,.35);background:rgba(251,191,36,.08);color:#fde68a;font-size:.9rem;line-height:1.55}
+.ov-notice strong{color:#fff}
+.ov-premium{margin:22px 0;padding:18px;border-radius:16px;border:1px dashed rgba(125,211,252,.45);background:rgba(14,22,38,.72);color:#e2e8f0}
+.ov-premium h3{margin:0 0 8px;font-size:1rem;color:#e0f2fe}
+.ov-premium p{margin:0 0 12px;color:#94a3b8;font-size:.88rem;line-height:1.5}
+.ov-premium ul{margin:0;padding-left:18px;color:#cbd5e1;font-size:.88rem;line-height:1.6}
+.ov-premium .ov-lock{display:inline-block;margin-top:12px;font-size:.78rem;font-weight:700;color:#7dd3fc}
+.ov-feedback{margin:22px 0 8px;padding:18px;border-radius:16px;border:1px solid rgba(148,163,184,.25);background:rgba(8,12,22,.75);color:#e8eef7}
+.ov-feedback h3{margin:0 0 6px;font-size:1rem}
+.ov-feedback .lead{margin:0 0 14px;color:#94a3b8;font-size:.88rem;line-height:1.5}
+.ov-feedback .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:640px){.ov-feedback .grid{grid-template-columns:1fr}}
+.ov-feedback label{display:block;font-size:.72rem;color:#94a3b8;margin-bottom:4px}
+.ov-feedback input,.ov-feedback select,.ov-feedback textarea{width:100%;box-sizing:border-box;border-radius:10px;border:1px solid rgba(148,163,184,.28);background:#0a1220;color:#e8eef7;padding:10px 11px;font:inherit}
+.ov-feedback textarea{min-height:96px;resize:vertical}
+.ov-feedback .full{grid-column:1/-1}
+.ov-feedback .actions{margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ov-feedback button{border:0;border-radius:11px;padding:10px 14px;font:inherit;font-weight:700;cursor:pointer;background:#38bdf8;color:#082f49}
+.ov-feedback .hint{font-size:.78rem;color:#94a3b8}
+.ov-foot{margin:28px 0 8px;padding:16px 0;border-top:1px solid rgba(148,163,184,.22);display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;color:#94a3b8;font-size:.8rem}
+.ov-foot a{color:#7dd3fc;font-weight:700;text-decoration:none}
+.ov-foot .made{color:#e2e8f0;font-weight:700}
+
+</style>
+</head>
+<body>
+
+<div class="ov-bar">
+  <div><a class="ov-co" href="http://orvantro.com/">ORVANTRO</a> · <span>오르반트로</span></div>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <span class="ov-beta">BETA · 결제/거래 불가</span>
+    <a href="http://orvantro.com/">공식 홈페이지</a>
+  </div>
+</div>
+
+<div class="app">
+  <header class="topbar">
+    <a href="#" class="brand" onclick="setPage('dashboard'); return false;">
+      <div class="brandmark">M</div>
+      <div>마진킷<small>MARGINKIT · by ORVANTRO</small></div>
+    </a>
+    <div class="top-actions">
+      <div class="privacy-pill"><span class="privacy-dot"></span> 정산·원가 파일은 브라우저에서만 처리 (서버 미전송)</div>
+      <a class="btn btn-sm" href="http://orvantro.com/" style="text-decoration:none">Made by ORVANTRO · 오르반트로</a>
+      <button class="btn btn-sm" id="btnHelp">도움말 ↗</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="nav-title">WORKSPACE</div>
+      <button class="nav-item active" data-page="dashboard"><span class="ico">▦</span> 대시보드</button>
+      <button class="nav-item" data-page="import"><span class="ico">⇧</span> 정산 파일 분석</button>
+      <button class="nav-item" data-page="products"><span class="ico">▤</span> 상품 원가 관리</button>
+      <button class="nav-item" data-page="results"><span class="ico">◫</span> 분석 리포트</button>
+
+      <div class="nav-title" style="margin-top:24px">TOOLS & TEMPLATES</div>
+      <button class="nav-item" id="btnDownloadSalesTpl"><span class="ico">⇩</span> 정산 샘플 양식</button>
+      <button class="nav-item" id="btnDownloadCostTpl"><span class="ico">⇩</span> 원가 샘플 양식</button>
+      <button class="nav-item" id="btnExportCurrentCostTpl"><span class="ico">✎</span> 현재 상품 원가표 받기</button>
+      <button class="nav-item" id="btnReset" style="color:#e53e3e"><span class="ico">↺</span> 분석 초기화</button>
+
+      <div class="side-note">
+        <strong>실수익, 제대로 아습니까?</strong>
+        매출이 올라도 마진이 마이너스인 상품이 있습니다. 정산 수수료와 배송비, 원가를 합산한 진짜 순이익을 확인하세요.
+      </div>
+    </aside>
+
+    <main class="main">
+      <!-- DASHBOARD PAGE -->
+      <section class="page active" id="page-dashboard">
+        <div class="heading-row">
+          <div>
+            <div class="eyebrow">OVERVIEW</div>
+            <h1>판매 실수익 대시보드</h1>
+            <p>업로드된 정산 내역과 등록된 원가를 바탕으로 상품별 실제 남는 이익과 수익성을 점검하세요.</p>
+          </div>
+          <div class="heading-actions">
+            <button class="btn" id="btnDemo">✦ 예시 데이터 체험</button>
+            <button class="btn btn-primary" id="btnStartImport">＋ 정산 파일 분석하기</button>
+          </div>
+        </div>
+
+        <div class="alert alert-info" id="demoBanner">
+          <span>ⓘ</span>
+          <div><strong>처음 방문하셨나요?</strong> '예시 데이터 체험'을 누르면 즉시 가상 스마트스토어/쿠팡 정산 데이터로 전체 분석 기능을 확인하실 수 있습니다.</div>
+        </div>
+
+        <div class="kpis">
+          <div class="panel kpi">
+            <div class="kpi-top">총 상품 매출 <span class="kpi-icon">₩</span></div>
+            <div class="kpi-val" id="kpiRevenue">—</div>
+            <div class="kpi-foot" id="kpiRevenueFoot">분석 데이터 없음</div>
+          </div>
+          <div class="panel kpi">
+            <div class="kpi-top">추정 총 순이익 <span class="kpi-icon">↗</span></div>
+            <div class="kpi-val" id="kpiProfit">—</div>
+            <div class="kpi-foot" id="kpiProfitFoot">원가 등록 상품 기준</div>
+          </div>
+          <div class="panel kpi">
+            <div class="kpi-top">추정 평균 마진율 <span class="kpi-icon">％</span></div>
+            <div class="kpi-val" id="kpiMargin">—</div>
+            <div class="kpi-foot" id="kpiMarginFoot">원가 등록 상품 기준</div>
+          </div>
+          <div class="panel kpi">
+            <div class="kpi-top">원가 미등록 상품 <span class="kpi-icon">!</span></div>
+            <div class="kpi-val" id="kpiMissing">—</div>
+            <div class="kpi-foot" id="kpiMissingFoot">원가 입력 필요</div>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="panel panel-pad">
+            <div class="panel-head">
+              <div>
+                <h2>상품별 순위 비교</h2>
+                <p id="chartSubText">매출 상위 상품 최대 6개</p>
+              </div>
+              <div class="chart-toggle">
+                <button id="chartSortRevenue" class="active">매출순</button>
+                <button id="chartSortProfit">이익순</button>
+              </div>
+            </div>
+            <div id="salesChart"></div>
+          </div>
+
+          <div class="panel panel-pad">
+            <div class="panel-head">
+              <div>
+                <h2>스마트 인사이트 요약</h2>
+                <p>주요 수익성 및 점검 필요 사항</p>
+              </div>
+              <span class="badge">INSIGHTS</span>
+            </div>
+            <div id="insights" class="insights"></div>
+          </div>
+        </div>
+
+        <div class="panel panel-pad">
+          <div class="panel-head">
+            <div>
+              <h2>주요 상품 미리보기</h2>
+              <p>현재 분석된 주요 상품 현황</p>
+            </div>
+            <button class="btn btn-sm" id="btnAllResults">전체 리포트 상세 보기 →</button>
+          </div>
+          <div id="dashTable"></div>
+        </div>
+
+        <div class="footer">※ 본 분석 도구는 사용자가 매핑한 열과 입력 원가를 기반으로 산출된 '추정 이익'입니다. 부가세 신고, 종합소득세, 플랫폼별 복합 정산 규칙에 따라 실제 세무 회계와 차이가 있을 수 있습니다.</div>
+      </section>
+
+      <!-- IMPORT PAGE -->
+      <section class="page" id="page-import">
+        <div class="heading-row">
+          <div>
+            <div class="eyebrow">DATA IMPORT</div>
+            <h1>정산 파일 & 원가 가져오기</h1>
+            <p>오픈마켓(스마트스토어, 쿠팡, 지마켓, 11번가, 카페24 등) 정산 엑셀/CSV를 올리면 자동으로 컬럼을 분석합니다. 파일은 브라우저 메모리에서만 작동합니다.</p>
+          </div>
+          <div class="heading-actions">
+            <button class="btn" id="btnImportTpl">샘플 양식 받기 ↓</button>
+          </div>
+        </div>
+
+        <div class="stepper">
+          <div class="step active" id="step1"><span class="n">1</span> 파일 업로드</div>
+          <div class="step-sep"></div>
+          <div class="step" id="step2"><span class="n">2</span> 열 매핑 확인</div>
+          <div class="step-sep"></div>
+          <div class="step" id="step3"><span class="n">3</span> 분석 완료</div>
+        </div>
+
+        <div class="upload-grid">
+          <div class="panel upload-card">
+            <div class="panel-head">
+              <div><h2>① 판매 정산 파일</h2><p>거래별/주문별 매출 및 수수료 내역</p></div>
+              <span class="badge" style="color:var(--primary); background:var(--primary2)">필수</span>
+            </div>
+            <div class="upload-drop" id="salesDrop">
+              <div class="upload-ico">📊</div>
+              <strong>정산 파일을 끌어다 놓거나 클릭하세요</strong>
+              <p>XLSX, XLS, CSV 지원 (EUC-KR 자동 처리)<br>네이버 스마트스토어, 쿠팡 정산 엑셀 지원</p>
+              <input type="file" id="salesFile" accept=".xlsx,.xls,.csv" hidden>
+            </div>
+            <div id="salesFileStatus"></div>
+          </div>
+
+          <div class="panel upload-card">
+            <div class="panel-head">
+              <div><h2>② 상품 원가 파일</h2><p>상품코드, 상품명, 단위 매입원가</p></div>
+              <span class="badge">선택</span>
+            </div>
+            <div class="upload-drop" id="costDrop">
+              <div class="upload-ico">🧾</div>
+              <strong>원가 파일을 끌어다 놓거나 클릭하세요</strong>
+              <p>XLSX, XLS, CSV 지원<br>원가 파일이 없어도 다음 화면에서 직접 입력할 수 있어요.</p>
+              <input type="file" id="costFile" accept=".xlsx,.xls,.csv" hidden>
+            </div>
+            <div id="costFileStatus"></div>
+          </div>
+        </div>
+
+        <div id="salesSheetBlock" class="panel panel-pad hidden" style="margin-bottom:18px">
+          <div class="panel-head"><div><h2>정산 파일 시트 선택</h2><p>분석할 데이터가 있는 시트를 지정하세요.</p></div></div>
+          <div class="field" style="max-width:360px">
+            <select id="salesSheet" class="select"></select>
+          </div>
+        </div>
+
+        <div id="costSheetBlock" class="panel panel-pad hidden" style="margin-bottom:18px">
+          <div class="panel-head"><div><h2>원가 파일 시트 선택</h2><p>상품 원가가 있는 시트를 지정하세요.</p></div></div>
+          <div class="field" style="max-width:360px">
+            <select id="costSheet" class="select"></select>
+          </div>
+        </div>
+
+        <!-- MAPPING PANEL -->
+        <div id="mappingPanel" class="panel panel-pad hidden" style="margin-bottom:18px">
+          <div class="panel-head">
+            <div>
+              <h2>③ 데이터 열(Column) 매핑 확인</h2>
+              <p>자동 추정된 열을 확인하세요. 불필요하거나 중복되는 항목은 '선택 안 함'으로 설정할 수 있습니다.</p>
+            </div>
+            <span class="status-chip chip-amber">열 확인 필수</span>
+          </div>
+
+          <div class="alert alert-warn">
+            <span>!</span>
+            <div><strong>주의 — 중복 차감 방지:</strong> 정산 파일의 '매출액'에 이미 취소/환불이 차감된 '순매출'이 들어가 있다면 '환불·취소 조정액' 열은 선택하지 마세요. 마찬가지로 수수료가 이미 공제된 입금예정액 열을 매출로 잡지 않도록 유의하세요.</div>
+          </div>
+
+          <div class="mapping-section">
+            <h3><span>📁</span> 판매 정산 데이터 열 연결</h3>
+            <div class="mapping-grid" id="salesMappings"></div>
+          </div>
+
+          <div class="mapping-section hidden" id="costMappingSection">
+            <h3><span>🏷️</span> 상품 원가 데이터 열 연결</h3>
+            <div class="mapping-grid" id="costMappings"></div>
+          </div>
+
+          <div id="previewBlock">
+            <div class="panel-head" style="margin-top:20px">
+              <div><h2>파일 상위 5행 미리보기</h2><p>열과 데이터가 올바르게 매칭되었는지 확인하세요.</p></div>
+            </div>
+            <div id="salesPreview" class="table-wrap"></div>
+          </div>
+
+          <div class="map-hint">
+            <strong>계산 공식:</strong> 추정 순이익 = (상품 매출 − 환불 조정액) − 상품 원가 − (수수료 + 판매자 배송비 + 광고비 + 기타 비용)<br>
+            ※ 각 비용 항목은 음수로 입력되어 있어도 자동으로 비용(절댓값)으로 계산됩니다.
+          </div>
+
+          <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:22px;">
+            <button class="btn" id="btnCancelImport">취소</button>
+            <button class="btn btn-primary" id="btnProcessImport" style="padding:10px 20px; font-size:13.5px">데이터 분석 실행하기 →</button>
+          </div>
+        </div>
+
+        <div id="importTip" class="panel panel-pad">
+          <div class="panel-head">
+            <div><h2>테스트용 정산 파일이 필요하신가요?</h2><p>실제 정산 파일 없이도 즉시 작동 원리를 확인해보실 수 있습니다.</p></div>
+          </div>
+          <button class="btn btn-primary" id="btnDemoImport">예시 데이터로 바로 분석해보기</button>
+        </div>
+      </section>
+
+      <!-- PRODUCTS PAGE -->
+      <section class="page" id="page-products">
+        <div class="heading-row">
+          <div>
+            <div class="eyebrow">COST MANAGEMENT</div>
+            <h1>상품 원가 관리</h1>
+            <p>상품 코드(SKU) 또는 상품명에 단위 원가를 입력합니다. 원가를 입력하면 모든 분석 결과에 실시간 자동 반영되며 브라우저에 안전하게 저장됩니다.</p>
+          </div>
+          <div class="heading-actions">
+            <button class="btn" id="btnExportCurrentCost">↓ 현재 원가표 다운로드</button>
+            <button class="btn" id="btnCostImport">원가 파일 가져오기</button>
+            <button class="btn btn-primary" id="btnAddProduct">＋ 개별 상품 원가 추가</button>
+          </div>
+        </div>
+
+        <div class="kpis" style="grid-template-columns:repeat(3, minmax(0,1fr))">
+          <div class="panel kpi">
+            <div class="kpi-top">등록된 원가 상품수 <span class="kpi-icon">▤</span></div>
+            <div class="kpi-val" id="prodCount">0</div>
+            <div class="kpi-foot">저장된 원가 마스터 기준</div>
+          </div>
+          <div class="panel kpi">
+            <div class="kpi-top">분석 중 원가 매칭 완료 <span class="kpi-icon">✓</span></div>
+            <div class="kpi-val" id="prodMapped">0</div>
+            <div class="kpi-foot">정산 데이터 기준</div>
+          </div>
+          <div class="panel kpi">
+            <div class="kpi-top">원가 미입력 상품 <span class="kpi-icon">!</span></div>
+            <div class="kpi-val" id="prodMissing">0</div>
+            <div class="kpi-foot">원가 입력이 필요한 상품</div>
+          </div>
+        </div>
+
+        <div class="panel panel-pad">
+          <div class="panel-head">
+            <div>
+              <h2>상품 원가 목록</h2>
+              <p>아래 표에서 원가를 직접 수정할 수 있습니다 (수정 시 자동 저장).</p>
+            </div>
+            <div class="search-box">
+              <span>⌕</span>
+              <input class="input" id="productSearch" placeholder="상품명 또는 상품코드 검색">
+            </div>
+          </div>
+          <div id="productTable"></div>
+        </div>
+
+        <div class="alert alert-info">
+          <span>ⓘ</span>
+          <div><strong>원가 매칭 우선순위:</strong> 1순위로 '상품 코드(SKU)'를 비교하고, 코드가 없으면 2순위로 '상품명(공백·특수문자 무시)'을 비교하여 원가를 자동 연결합니다. 판매 단위가 묶음인 경우 묶음당 원가를 입력해 주세요.</div>
+        </div>
+      </section>
+
+      <!-- RESULTS PAGE -->
+      <section class="page" id="page-results">
+        <div class="heading-row">
+          <div>
+            <div class="eyebrow">DETAILED REPORT</div>
+            <h1>상품별 손익 분석 리포트</h1>
+            <p>상품별 매출액, 원가, 수수료, 마진율 및 공헌이익을 상세히 검토하세요.</p>
+          </div>
+          <div class="heading-actions">
+            <button class="btn" id="btnExport">↓ 분석 리포트 CSV 내보내기</button>
+            <button class="btn btn-primary" id="btnExportCosts">↓ 원가 등록 템플릿 받기</button>
+          </div>
+        </div>
+
+        <div id="resultNotice"></div>
+
+        <div class="panel panel-pad">
+          <div class="panel-head">
+            <div>
+              <h2>상품별 수익성 상세 목록</h2>
+              <p id="resultSub">업로드된 정산 데이터를 기반으로 계산되었습니다.</p>
+            </div>
+            <div class="filters">
+              <button class="filter-btn active" data-filter="all">전체보기</button>
+              <button class="filter-btn" data-filter="profit">이익 상품 (+)</button>
+              <button class="filter-btn" data-filter="loss">적자 상품 (-)</button>
+              <button class="filter-btn" data-filter="missing">원가 미등록</button>
+            </div>
+          </div>
+
+          <div class="search-row" style="margin-bottom:16px">
+            <div class="search-box">
+              <span>⌕</span>
+              <input class="input" id="resultSearch" placeholder="상품명 또는 상품코드 검색">
+            </div>
+            <span class="muted tiny" id="resultCount" style="margin-left:auto">0개 상품</span>
+          </div>
+
+          <div id="resultTable"></div>
+        </div>
+
+        <div class="panel panel-pad" style="margin-top:20px">
+          <div class="panel-head">
+            <div><h2>실수익 분석 시 필수 체크리스트</h2><p>정확한 의사결정을 위한 가이드</p></div>
+          </div>
+          <div class="insights" id="calcNotes"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<!-- Modal Dialogs -->
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <h2 id="modalTitle">알림</h2>
+    <p id="modalBody"></p>
+    <div id="modalCustomContent"></div>
+    <div class="modal-actions" id="modalActions">
+      <button class="btn btn-primary" id="modalClose">확인</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Product Modal -->
+<div class="modal-backdrop" id="addProductModalBackdrop">
+  <div class="modal" style="max-width:440px;">
+    <h2>상품 원가 추가</h2>
+    <p>새로운 상품 원가를 등록합니다. 정산 파일에 있는 상품코드/상품명과 일치하면 자동으로 연결됩니다.</p>
+    <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px;">
+      <div class="field">
+        <label>상품명 <span style="color:var(--red)">*</span></label>
+        <input class="input" id="newProdName" placeholder="예: 캠핑 텀블러 500ml" />
+      </div>
+      <div class="field">
+        <label>상품 코드 / 옵션 코드 (선택)</label>
+        <input class="input" id="newProdSku" placeholder="예: TB-050" />
+      </div>
+      <div class="field">
+        <label>단위당 매입 원가 (₩) <span style="color:var(--red)">*</span></label>
+        <input class="input" id="newProdCost" type="number" min="0" step="10" placeholder="예: 9500" />
+      </div>
+    </div>
+    <div class="modal-actions" style="margin-top:22px;">
+      <button class="btn" id="btnCancelAddProd">취소</button>
+      <button class="btn btn-primary" id="btnSaveAddProd">저장하기</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+'use strict';
+
+const $ = (s, root=document) => root.querySelector(s);
+const $$ = (s, root=document) => [...root.querySelectorAll(s)];
+
+// --- Local Storage Management ---
+const STORAGE_KEY_COSTS = 'marginkit_costs_v2';
+const STORAGE_KEY_PRESET = 'marginkit_map_preset_v2';
+
+function loadCostsFromStorage() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_COSTS);
+    if (saved) {
+      const arr = JSON.parse(saved);
+      return new Map(arr);
+    }
+  } catch(e) {
+    console.error('Failed to load costs from localStorage', e);
+  }
+  return new Map();
+}
+
+function saveCostsToStorage() {
+  try {
+    const arr = [...state.costs.entries()];
+    localStorage.setItem(STORAGE_KEY_COSTS, JSON.stringify(arr));
+  } catch(e) {
+    console.error('Failed to save costs to localStorage', e);
+  }
+}
+
+function saveMappingPreset(map) {
+  try {
+    localStorage.setItem(STORAGE_KEY_PRESET, JSON.stringify(map));
+  } catch(e) {}
+}
+
+function loadMappingPreset() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_PRESET);
+    return saved ? JSON.parse(saved) : {};
+  } catch(e) {
+    return {};
+  }
+}
+
+// --- Application State ---
+const state = {
+  salesWorkbook: null,
+  costWorkbook: null,
+  salesFileName: '',
+  costFileName: '',
+  salesRows: [],
+  costRows: [],
+  salesHeaders: [],
+  costHeaders: [],
+  salesSheetName: '',
+  costSheetName: '',
+  salesMap: {},
+  costMap: {},
+  transactions: [],
+  products: [],
+  costs: loadCostsFromStorage(),
+  isDemo: false,
+  filter: 'all',
+  activeTab: 'dashboard',
+  chartMetric: 'revenue', // 'revenue' | 'profit'
+  sortColumn: 'revenue',
+  sortAsc: false
+};
+
+// --- Field Definitions & Aliases for Korean E-Commerce ---
+const fieldDefs = [
+  {
+    key: 'product',
+    label: '상품명 / 옵션정보',
+    required: true,
+    aliases: [
+      '상품명', '상품 이름', '제품명', '옵션정보', '주문상품명', '노출상품명', '등록상품명',
+      'item name', 'product name', 'product', 'item', '상품', '상품/옵션정보'
+    ]
+  },
+  {
+    key: 'sku',
+    label: '상품 코드 / SKU / 옵션코드',
+    aliases: [
+      '상품코드', '상품 코드', '옵션코드', '옵션 코드', '판매자상품코드', '옵션관리코드',
+      '자체상품코드', '바코드', '노출상품id', '옵션id', 'sku', 'item code', 'product code', '상품번호'
+    ]
+  },
+  {
+    key: 'revenue',
+    label: '상품 매출액 (환불 차감 전)',
+    required: true,
+    aliases: [
+      '상품매출', '상품 매출', '판매금액', '판매 금액', '주문금액', '주문 금액', '결제금액',
+      '결제 금액', '매출액', '매출', '정산대상금액', '결제완료금액', '총결제금액', 'sales', 'revenue', 'gross sales'
+    ]
+  },
+  {
+    key: 'qty',
+    label: '판매 수량',
+    aliases: [
+      '판매수량', '판매 수량', '수량', '주문수량', '주문 수량', '구매수량', '결제수량',
+      'quantity', 'qty', '수량합계'
+    ]
+  },
+  {
+    key: 'commission',
+    label: '판매 수수료 / 이용료',
+    aliases: [
+      '판매수수료', '판매 수수료', '수수료', '네이버페이 주문관리 수수료', '매출연동수수료',
+      '중개수수료', '서비스이용료', '카테고리수수료', '결제수수료', 'commission', 'fee'
+    ]
+  },
+  {
+    key: 'shipping',
+    label: '판매자 부담 배송비',
+    aliases: [
+      '배송비', '판매자배송비', '판매자 부담 배송비', '출고배송비', '정산배송비',
+      '배송비정산액', 'shipping', 'shipping fee'
+    ]
+  },
+  {
+    key: 'ads',
+    label: '광고비 / 마케팅비',
+    aliases: [
+      '광고비', '광고비용', '마케팅비', 'cpc', '쇼핑검색광고', '매출최적화광고', 'ads', 'ad cost'
+    ]
+  },
+  {
+    key: 'refunds',
+    label: '환불·취소 조정액 (양수)',
+    aliases: [
+      '환불금액', '환불 금액', '취소금액', '취소 금액', '취소완료금액', '반품금액',
+      '환불/취소', '환불액', '환불 조정액', 'refund', 'refund amount'
+    ]
+  },
+  {
+    key: 'other',
+    label: '기타 공제 / 프로모션 부담금',
+    aliases: [
+      '기타비용', '기타 비용', '추가비용', '프로모션할인', '쿠폰할인부담금', '정산차감액',
+      '패널티', 'other fee', 'other cost'
+    ]
+  }
+];
+
+const costFieldDefs = [
+  {
+    key: 'product',
+    label: '상품명',
+    required: true,
+    aliases: ['상품명', '상품 이름', '제품명', 'product', 'item name', '상품']
+  },
+  {
+    key: 'sku',
+    label: '상품 코드 / SKU',
+    aliases: ['상품코드', '상품 코드', '옵션코드', '옵션 코드', 'sku', 'item code', 'product code', '판매자상품코드']
+  },
+  {
+    key: 'unitCost',
+    label: '단위당 매입 원가 (₩)',
+    required: true,
+    aliases: [
+      '매입원가', '매입 원가', '원가', '상품원가', '상품 원가', '단위원가', '단위 원가',
+      '단위당 원가', '공급가', '매입가', 'unit cost', 'cost', 'cost price'
+    ]
+  }
+];
+
+// --- Utilities ---
+const fmt = (n, decimals=0) => Number.isFinite(Number(n)) ? new Intl.NumberFormat('ko-KR', { maximumFractionDigits: decimals, minimumFractionDigits: decimals }).format(Number(n)) : '—';
+const won = n => Number.isFinite(Number(n)) ? '₩' + fmt(Math.round(Number(n))) : '—';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function compactWon(n) {
+  n = Number(n) || 0;
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 100000000) return sign + (abs / 100000000).toFixed(1) + '억';
+  if (abs >= 10000) return sign + (abs / 10000).toFixed(0) + '만';
+  return won(n);
+}
+function shorten(s, n=10) {
+  s = String(s ?? '');
+  return s.length > n ? s.slice(0, n - 1) + '…' : s;
+}
+
+function toast(message) {
+  const el = $('#toast');
+  el.textContent = message;
+  el.classList.add('show');
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+function showModal(title, body) {
+  $('#modalTitle').textContent = title;
+  $('#modalBody').textContent = body;
+  $('#modalCustomContent').innerHTML = '';
+  $('#modalBackdrop').classList.add('show');
+}
+
+function parseNum(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  let s = String(v).trim();
+  if (!s || s === '-' || s === '—') return null;
+  const neg = /^\(.*\)$/.test(s) || s.startsWith('-');
+  s = s.replace(/[₩원,$%\s]/g, '').replace(/[()\-]/g, '').replace(/,/g, '');
+  const n = Number(s);
+  return Number.isFinite(n) ? (neg ? -Math.abs(n) : n) : null;
+}
+
+function norm(s) {
+  return String(s ?? '').toLowerCase().replace(/[\s_\-()/·,\[\]]/g, '').trim();
+}
+
+function findHeader(headers, aliases) {
+  const normalized = headers.map(norm);
+  for (const a of aliases) {
+    const n = norm(a);
+    const i = normalized.indexOf(n);
+    if (i >= 0) return headers[i];
+  }
+  for (const a of aliases) {
+    const n = norm(a);
+    if (n.length >= 2) {
+      const i = normalized.findIndex(h => h.includes(n) || n.includes(h));
+      if (i >= 0) return headers[i];
+    }
+  }
+  return '';
+}
+
+function detectMaps(headers, defs, savedPreset = {}) {
+  const m = {};
+  for (const d of defs) {
+    if (savedPreset[d.key] && headers.includes(savedPreset[d.key])) {
+      m[d.key] = savedPreset[d.key];
+    } else {
+      m[d.key] = findHeader(headers, d.aliases) || '';
+    }
+  }
+  return m;
+}
+
+// --- Encoding-Aware File Reader (Supports UTF-8 and EUC-KR / CP949) ---
+function readFile(file, cb) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const buffer = e.target.result;
+      let wb;
+
+      if (/\.csv$/i.test(file.name)) {
+        let text = '';
+        try {
+          const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
+          text = utf8Decoder.decode(buffer);
+        } catch(decodeErr) {
+          try {
+            const euckrDecoder = new TextDecoder('euc-kr');
+            text = euckrDecoder.decode(buffer);
+          } catch(euckrErr) {
+            text = new TextDecoder().decode(buffer);
+          }
+        }
+
+        if (window.XLSX) {
+          wb = XLSX.read(text, { type: 'string', cellDates: true });
+        } else {
+          wb = parseCsvToWorkbook(text, file.name);
+        }
+      } else {
+        if (!window.XLSX) throw new Error('엑셀 파싱 라이브러리를 불러오지 못했습니다.');
+        wb = XLSX.read(buffer, { type: 'array', cellDates: true });
+      }
+
+      cb(null, wb);
+    } catch(err) {
+      cb(err);
+    }
+  };
+  reader.onerror = () => cb(new Error('파일을 읽는 도중 오류가 발생했습니다.'));
+  reader.readAsArrayBuffer(file);
+}
+
+function parseCsvToWorkbook(csvText, name) {
+  const lines = csvText.split(/\r\n|\n|\r/);
+  const rows = [];
+  for (let line of lines) {
+    if (!line.trim()) continue;
+    const row = [];
+    let inQuotes = false;
+    let field = '';
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') {
+        if (inQuotes && line[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = !inQuotes;
+      } else if (c === ',' && !inQuotes) {
+        row.push(field);
+        field = '';
+      } else {
+        field += c;
+      }
+    }
+    row.push(field);
+    rows.push(row);
+  }
+  const ws = XLSX ? XLSX.utils.aoa_to_sheet(rows) : null;
+  return {
+    SheetNames: ['Sheet1'],
+    Sheets: { 'Sheet1': ws || rows }
+  };
+}
+
+function sheetToRows(wb, sheetName) {
+  const ws = wb.Sheets[sheetName];
+  if (!ws) return { headers: [], rows: [] };
+
+  if (window.XLSX && XLSX.utils && XLSX.utils.sheet_to_json) {
+    let data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true, blankrows: false });
+    while (data.length && data[0].every(v => String(v ?? '').trim() === '')) data.shift();
+    if (!data.length) return { headers: [], rows: [] };
+
+    const headers = data[0].map((v, i) => String(v ?? '').trim() || `열 ${i + 1}`);
+    const rows = data.slice(1).filter(r => r.some(v => String(v ?? '').trim() !== '')).map(r => {
+      const o = {};
+      headers.forEach((h, i) => o[h] = r[i] ?? '');
+      return o;
+    });
+    return { headers, rows };
+  } else if (Array.isArray(ws)) {
+    if (!ws.length) return { headers: [], rows: [] };
+    const headers = ws[0].map((v, i) => String(v ?? '').trim() || `열 ${i + 1}`);
+    const rows = ws.slice(1).map(r => {
+      const o = {};
+      headers.forEach((h, i) => o[h] = r[i] ?? '');
+      return o;
+    });
+    return { headers, rows };
+  }
+  return { headers: [], rows: [] };
+}
+
+// --- Navigation ---
+function setPage(name) {
+  state.activeTab = name;
+  $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + name));
+  $$('.nav-item[data-page]').forEach(b => b.classList.toggle('active', b.dataset.page === name));
+
+  if (name === 'dashboard') renderDashboard();
+  if (name === 'products') renderProducts();
+  if (name === 'results') renderResults();
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// --- Data Ingestion & Calculation ---
+function ingestSalesRows(rows, map) {
+  if (!map.product || !map.revenue) {
+    return { ok: false, error: '상품명과 상품 매출 열은 필수입니다.' };
+  }
+
+  const parsed = [];
+  let skipped = 0;
+
+  for (const row of rows) {
+    const product = String(row[map.product] ?? '').trim();
+    const revenue = parseNum(row[map.revenue]);
+
+    if (!product || revenue === null) {
+      skipped++;
+      continue;
+    }
+
+    const get = k => map[k] ? parseNum(row[map[k]]) : null;
+    const qty = get('qty');
+
+    parsed.push({
+      product,
+      sku: map.sku ? String(row[map.sku] ?? '').trim() : '',
+      revenue,
+      qty: (qty === null || qty === 0) ? 1 : qty,
+      commission: Math.abs(get('commission') ?? 0),
+      shipping: Math.abs(get('shipping') ?? 0),
+      ads: Math.abs(get('ads') ?? 0),
+      refunds: Math.abs(get('refunds') ?? 0),
+      other: Math.abs(get('other') ?? 0),
+      source: row
+    });
+  }
+
+  if (!parsed.length) {
+    return { ok: false, error: '분석 가능한 행이 없습니다. 상품명 및 매출 열 매핑과 숫자 데이터를 확인하세요.' };
+  }
+
+  return { ok: true, rows: parsed, skipped };
+}
+
+function ingestCostRows(rows, map) {
+  if (!map.product || !map.unitCost) {
+    return { ok: false, error: '원가 파일에서 상품명과 단위당 매입 원가 열을 지정해 주세요.' };
+  }
+
+  let added = 0;
+  for (const row of rows) {
+    const product = String(row[map.product] ?? '').trim();
+    const sku = map.sku ? String(row[map.sku] ?? '').trim() : '';
+    const unitCost = parseNum(row[map.unitCost]);
+
+    if (!product || unitCost === null || unitCost < 0) continue;
+
+    const key = sku ? `sku:${sku}` : `name:${norm(product)}`;
+    state.costs.set(key, { product, sku, unitCost });
+    added++;
+  }
+
+  if (added > 0) saveCostsToStorage();
+  return { ok: added > 0, added };
+}
+
+function getCost(p) {
+  let c = p.sku ? state.costs.get(`sku:${p.sku}`) : null;
+  if (!c) c = state.costs.get(`name:${norm(p.product)}`);
+  return c ?? null;
+}
+
+function aggregate() {
+  const map = new Map();
+
+  for (const t of state.transactions) {
+    const key = t.sku ? `sku:${t.sku}` : `name:${norm(t.product)}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        product: t.product,
+        sku: t.sku,
+        qty: 0,
+        revenue: 0,
+        commission: 0,
+        shipping: 0,
+        ads: 0,
+        refunds: 0,
+        other: 0,
+        rows: 0
+      });
+    }
+    const p = map.get(key);
+    p.qty += t.qty;
+    p.revenue += t.revenue;
+    p.commission += t.commission;
+    p.shipping += t.shipping;
+    p.ads += t.ads;
+    p.refunds += t.refunds;
+    p.other += t.other;
+    p.rows++;
+  }
+
+  state.products = [...map.values()].map(p => {
+    const c = getCost(p);
+    const netRevenue = p.revenue - p.refunds;
+    const fees = p.commission + p.shipping + p.ads + p.other;
+    const cost = c ? c.unitCost * p.qty : null;
+    const profit = cost === null ? null : netRevenue - fees - cost;
+    const margin = (profit !== null && netRevenue > 0) ? (profit / netRevenue) * 100 : null;
+    const totalCostAndFee = (cost ?? 0) + fees;
+    const roi = (profit !== null && totalCostAndFee > 0) ? (profit / totalCostAndFee) * 100 : null;
+
+    return {
+      ...p,
+      netRevenue,
+      fees,
+      cost,
+      unitCost: c ? c.unitCost : null,
+      profit,
+      margin,
+      roi,
+      hasCost: !!c
+    };
+  });
+
+  return sortProducts(state.products);
+}
+
+function sortProducts(products) {
+  const col = state.sortColumn;
+  const asc = state.sortAsc ? 1 : -1;
+
+  return [...products].sort((a, b) => {
+    let va = a[col];
+    let vb = b[col];
+
+    if (va === null || va === undefined) return 1;
+    if (vb === null || vb === undefined) return -1;
+
+    if (typeof va === 'string') return va.localeCompare(vb, 'ko') * asc;
+    return (va - vb) * asc;
+  });
+}
+
+function totalUp() {
+  const products = aggregate();
+  const totalRevenue = products.reduce((s, p) => s + p.revenue, 0);
+  const totalRefunds = products.reduce((s, p) => s + p.refunds, 0);
+  const known = products.filter(p => p.hasCost);
+  const profit = known.reduce((s, p) => s + (p.profit ?? 0), 0);
+  const knownRevenue = known.reduce((s, p) => s + p.netRevenue, 0);
+  const missing = products.filter(p => !p.hasCost).length;
+  const qty = products.reduce((s, p) => s + p.qty, 0);
+
+  return {
+    products,
+    totalRevenue,
+    totalRefunds,
+    profit,
+    margin: knownRevenue > 0 ? (profit / knownRevenue) * 100 : null,
+    missing,
+    knownCount: known.length,
+    qty,
+    knownRevenue
+  };
+}
+
+function setCost(p, unitCost) {
+  const n = parseNum(unitCost);
+  if (n === null || n < 0) {
+    toast('원가는 0 이상의 숫자로 입력해 주세요.');
+    return false;
+  }
+  const key = p.sku ? `sku:${p.sku}` : `name:${norm(p.product)}`;
+  state.costs.set(key, { product: p.product, sku: p.sku || '', unitCost: n });
+  saveCostsToStorage();
+  return true;
+}
+
+// --- Dashboard Rendering ---
+function renderDashboard() {
+  const t = totalUp();
+
+  $('#kpiRevenue').textContent = t.products.length ? won(t.totalRevenue) : '—';
+  $('#kpiRevenueFoot').textContent = t.products.length ? `${fmt(t.products.length)}개 품목 · ${fmt(t.qty)}개 수량` : '분석 데이터 없음';
+
+  $('#kpiProfit').textContent = t.knownCount ? won(t.profit) : '—';
+  $('#kpiProfit').className = 'kpi-val ' + (t.knownCount ? (t.profit < 0 ? 'negative' : 'positive') : '');
+  $('#kpiProfitFoot').textContent = t.knownCount ? `원가 등록 ${fmt(t.knownCount)}개 상품 합산` : '원가가 등록된 상품만 계산';
+
+  $('#kpiMargin').textContent = t.margin === null ? '—' : `${fmt(t.margin, 1)}%`;
+  $('#kpiMarginFoot').textContent = t.knownCount ? `원가 등록 상품 매출 기준` : '계산 가능한 상품 없음';
+
+  $('#kpiMissing').textContent = t.products.length ? fmt(t.missing) : '—';
+  $('#kpiMissingFoot').textContent = t.products.length ? (t.missing ? `${fmt(t.missing)}개 품목 원가 입력 필요` : '모든 상품에 원가 등록 완료됨') : '원가 입력 필요';
+
+  $('#demoBanner').classList.toggle('hidden', !!(t.products.length && !state.isDemo));
+
+  renderSalesChart(t.products);
+  renderInsights(t);
+  renderDashTable(t.products);
+}
+
+function renderSalesChart(products) {
+  const el = $('#salesChart');
+  if (!products.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">▥</div><h3>아직 표시할 데이터가 없습니다</h3><p>예시 데이터를 체험하거나 판매 정산 파일을 업로드하세요.</p></div>';
+    return;
+  }
+
+  const metric = state.chartMetric;
+  $('#chartSubText').textContent = metric === 'revenue' ? '매출 상위 상품 최대 6개' : '추정 이익 상위 상품 최대 6개';
+
+  let rows = [...products];
+  if (metric === 'revenue') {
+    rows = rows.sort((a, b) => b.revenue - a.revenue).slice(0, 6);
+  } else {
+    rows = rows.filter(p => p.hasCost && p.profit !== null).sort((a, b) => (b.profit ?? 0) - (a.profit ?? 0)).slice(0, 6);
+  }
+
+  if (!rows.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">!</div><h3>표시할 상품이 없습니다</h3><p>원가가 등록된 상품이 있어야 이익 차트를 볼 수 있습니다.</p></div>';
+    return;
+  }
+
+  const max = Math.max(...rows.map(p => Math.abs(metric === 'revenue' ? p.revenue : (p.profit ?? 0))), 1);
+
+  el.innerHTML = `
+    <div class="bar-chart">
+      ${rows.map(p => {
+        const val = metric === 'revenue' ? p.revenue : (p.profit ?? 0);
+        const h = Math.max(6, Math.abs(val) / max * 100);
+        const isLoss = val < 0;
+        return `
+          <div class="bar-col">
+            <div class="bar-value ${isLoss ? 'negative' : ''}">${esc(compactWon(val))}</div>
+            <div class="bar-track">
+              <div class="bar-fill ${isLoss ? 'bar-loss' : ''}" style="height:${h}%"></div>
+            </div>
+            <div class="bar-label" title="${esc(p.product)}">${esc(shorten(p.product, 7))}</div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+    <div class="tiny muted" style="margin-top:12px; display:flex; justify-content:space-between">
+      <span>${metric === 'revenue' ? '매출액 기준 (VAT/환불 포함)' : '원가 및 수수료 차감 후 추정 이익'}</span>
+      <span style="color:var(--primary); font-weight:700">실시간 반영됨</span>
+    </div>
+  `;
+}
+
+function renderInsights(t) {
+  const el = $('#insights');
+  if (!t.products.length) {
+    el.innerHTML = `
+      <div class="insight">
+        <div class="insight-icon blue">✓</div>
+        <div>
+          <strong>분석을 시작해 보세요</strong>
+          <p>정산 파일을 올리거나 예시 데이터를 불러오면 원가 누락, 손실 품목 등 핵심 수익성 이슈를 진단해 드립니다.</p>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const arr = [];
+  if (t.missing > 0) {
+    arr.push(['!', '원가 미등록 상품 확인', `${t.missing}개 품목의 원가가 누락되어 이익 집계에서 제외되었습니다. 원가를 입력해야 전체 순이익이 정확해집니다.`, 'amber']);
+  }
+
+  const lossProds = t.products.filter(p => p.hasCost && p.profit < 0);
+  if (lossProds.length > 0) {
+    const totalLoss = lossProds.reduce((s, p) => s + Math.abs(p.profit), 0);
+    arr.push(['↘', '적자(손실) 판매 품목 주의', `${lossProds.length}개 상품에서 총 ${won(totalLoss)}의 손실이 추정됩니다. 광고비나 과도한 수수료, 매입원가를 재점검하세요.`, 'red']);
+  }
+
+  const bestProfit = [...t.products].filter(p => p.hasCost && p.profit > 0).sort((a, b) => b.profit - a.profit)[0];
+  if (bestProfit) {
+    arr.push(['★', '최대 이익 기여 효자 상품', `[${shorten(bestProfit.product, 12)}]에서 추정 이익 ${won(bestProfit.profit)} (마진율 ${fmt(bestProfit.margin, 1)}%)을 기록했습니다.`, 'green']);
+  }
+
+  const refundHeavy = t.products.filter(p => p.refunds > 0 && p.revenue > 0 && (p.refunds / p.revenue) > 0.1);
+  if (refundHeavy.length > 0) {
+    arr.push(['⟲', '반품·환불 비율 주의 품목', `${refundHeavy.length}개 품목에서 매출의 10%를 초과하는 환불/취소가 감지되었습니다. 품질 및 배송 이슈를 점검하세요.`, 'amber']);
+  }
+
+  if (arr.length === 0) {
+    arr.push(['✓', '수익성 양호', '모든 상품의 원가가 등록되어 있으며, 적자 상품이 발생하지 않았습니다.', 'green']);
+  }
+
+  el.innerHTML = arr.slice(0, 4).map(([ico, title, desc, type]) => `
+    <div class="insight">
+      <div class="insight-icon ${type}">${ico}</div>
+      <div>
+        <strong>${esc(title)}</strong>
+        <p>${esc(desc)}</p>
+      </div>
+    </div>
+  `).join('');
+}
+
+// --- Tables Rendering ---
+function renderTableHtml(products, preview = false) {
+  if (!products.length) {
+    return `
+      <div class="empty-state">
+        <div class="empty-icon">▤</div>
+        <h3>표시할 상품이 없습니다</h3>
+        <p>정산 파일을 가져오거나 검색 조건을 변경해 보세요.</p>
+      </div>
+    `;
+  }
+
+  const rows = preview ? products.slice(0, 6) : products;
+
+  const getSortIco = col => {
+    if (state.sortColumn !== col) return '<span class="sort-ico">↕</span>';
+    return state.sortAsc ? '<span class="sort-ico">▲</span>' : '<span class="sort-ico">▼</span>';
+  };
+
+  return `
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th class="sortable ${state.sortColumn==='product'?'sorted':''}" data-sort="product">상품명 / 코드 ${getSortIco('product')}</th>
+            <th class="num sortable ${state.sortColumn==='revenue'?'sorted':''}" data-sort="revenue">매출액 ${getSortIco('revenue')}</th>
+            <th class="num sortable ${state.sortColumn==='qty'?'sorted':''}" data-sort="qty">판매수량 ${getSortIco('qty')}</th>
+            <th class="num sortable ${state.sortColumn==='cost'?'sorted':''}" data-sort="cost">상품 원가 ${getSortIco('cost')}</th>
+            <th class="num">플랫폼 수수료·기타</th>
+            <th class="num sortable ${state.sortColumn==='profit'?'sorted':''}" data-sort="profit">추정 순이익 ${getSortIco('profit')}</th>
+            <th class="num sortable ${state.sortColumn==='margin'?'sorted':''}" data-sort="margin">마진율 ${getSortIco('margin')}</th>
+            <th>상태</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(p => `
+            <tr>
+              <td>
+                <span class="product-name" title="${esc(p.product)}">${esc(p.product)}</span>
+                ${p.sku ? `<span class="product-code">${esc(p.sku)}</span>` : ''}
+              </td>
+              <td class="num money">${won(p.revenue)}</td>
+              <td class="num money">${fmt(p.qty)}</td>
+              <td class="num money">${p.cost === null ? '<span class="muted">미등록</span>' : won(p.cost)}</td>
+              <td class="num money">${won(p.fees + p.refunds)}</td>
+              <td class="num money ${p.profit === null ? '' : (p.profit < 0 ? 'negative' : 'positive')}">
+                ${p.profit === null ? '—' : won(p.profit)}
+              </td>
+              <td class="num font-bold ${p.margin === null ? '' : (p.margin < 0 ? 'negative' : 'positive')}">
+                ${p.margin === null ? '—' : `${fmt(p.margin, 1)}%`}
+              </td>
+              <td>
+                ${p.hasCost
+                  ? (p.profit < 0 ? '<span class="status-chip chip-red">손실 (적자)</span>' : '<span class="status-chip chip-green">정상 마진</span>')
+                  : '<span class="status-chip chip-amber">원가 입력필요</span>'
+                }
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function bindTableSortEvents(container) {
+  $$('.sortable', container).forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.sort;
+      if (state.sortColumn === col) {
+        state.sortAsc = !state.sortAsc;
+      } else {
+        state.sortColumn = col;
+        state.sortAsc = false;
+      }
+      if (state.activeTab === 'results') renderResults();
+      if (state.activeTab === 'dashboard') renderDashboard();
+    });
+  });
+}
+
+function renderDashTable(products) {
+  const container = $('#dashTable');
+  if (!products.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">▤</div>
+        <h3>분석 결과가 아직 없습니다</h3>
+        <p>첫 번째 정산 파일을 업로드하거나 예시 데이터로 기능을 체험해 보세요.</p>
+        <button class="btn btn-primary" id="btnDemo2">예시 데이터 불러오기</button>
+      </div>
+    `;
+    if ($('#btnDemo2')) $('#btnDemo2').onclick = loadDemo;
+    return;
+  }
+  container.innerHTML = renderTableHtml(products, true);
+  bindTableSortEvents(container);
+}
+
+// --- Products Cost Management Page ---
+function renderProducts() {
+  const t = totalUp();
+  const search = norm($('#productSearch').value || '');
+
+  const allProductKeys = new Set();
+  const combinedList = [];
+
+  for (const p of t.products) {
+    allProductKeys.add(p.key);
+    combinedList.push({
+      key: p.key,
+      product: p.product,
+      sku: p.sku,
+      qty: p.qty,
+      unitCost: p.unitCost,
+      cost: p.cost,
+      hasCost: p.hasCost,
+      isFromSales: true
+    });
+  }
+
+  for (const [key, c] of state.costs.entries()) {
+    if (!allProductKeys.has(key)) {
+      allProductKeys.add(key);
+      combinedList.push({
+        key,
+        product: c.product,
+        sku: c.sku,
+        qty: 0,
+        unitCost: c.unitCost,
+        cost: 0,
+        hasCost: true,
+        isFromSales: false
+      });
+    }
+  }
+
+  $('#prodCount').textContent = fmt(state.costs.size);
+  $('#prodMapped').textContent = fmt(t.products.filter(p => p.hasCost).length);
+  $('#prodMissing').textContent = fmt(t.missing);
+
+  const filtered = combinedList.filter(p =>
+    !search || norm(p.product).includes(search) || norm(p.sku).includes(search)
+  );
+
+  const container = $('#productTable');
+
+  if (!filtered.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">▤</div>
+        <h3>표시할 상품 원가 데이터가 없습니다</h3>
+        <p>정산 데이터를 가져오거나 상단의 '＋ 개별 상품 원가 추가' 버튼으로 새 원가를 등록하세요.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>상품명 / 코드</th>
+            <th class="num">판매 수량</th>
+            <th>단위당 매입 원가 (₩)</th>
+            <th class="num">총 매입 원가</th>
+            <th>상태</th>
+            <th style="width:50px; text-align:center">관리</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filtered.map(p => `
+            <tr>
+              <td>
+                <span class="product-name" title="${esc(p.product)}">${esc(p.product)}</span>
+                ${p.sku ? `<span class="product-code">${esc(p.sku)}</span>` : ''}
+              </td>
+              <td class="num">${p.isFromSales ? fmt(p.qty) : '<span class="muted">— (정산 없음)</span>'}</td>
+              <td>
+                <input class="cost-input" type="number" min="0" step="10"
+                       data-cost-key="${esc(p.key)}"
+                       value="${p.unitCost === null ? '' : p.unitCost}"
+                       placeholder="원가 입력" />
+              </td>
+              <td class="num money">${p.cost === null ? '—' : won(p.cost)}</td>
+              <td>
+                ${p.hasCost
+                  ? '<span class="status-chip chip-green">원가 등록됨</span>'
+                  : '<span class="status-chip chip-amber">입력 필요</span>'
+                }
+              </td>
+              <td style="text-align:center">
+                ${p.hasCost ? `<button class="btn-icon" data-delete-cost="${esc(p.key)}" title="원가 삭제">🗑️</button>` : ''}
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="tiny muted" style="margin-top:12px; display:flex; justify-content:space-between">
+      <span>원가 입력란을 변경하면 즉시 반영되며 자동 저장됩니다.</span>
+      <span>총 ${filtered.length}개 상품 표시 중</span>
+    </div>
+  `;
+
+  $$('[data-cost-key]', container).forEach(input => {
+    input.addEventListener('change', () => {
+      const key = input.dataset.costKey;
+      const item = combinedList.find(x => x.key === key);
+      if (!item) return;
+
+      const v = input.value.trim();
+      if (!v) {
+        state.costs.delete(key);
+        saveCostsToStorage();
+      } else {
+        setCost(item, v);
+      }
+      renderProducts();
+      renderDashboard();
+      renderResults();
+      toast('상품 원가를 업데이트했습니다.');
+    });
+  });
+
+  $$('[data-delete-cost]', container).forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.deleteCost;
+      state.costs.delete(key);
+      saveCostsToStorage();
+      renderProducts();
+      renderDashboard();
+      renderResults();
+      toast('등록된 원가를 삭제했습니다.');
+    });
+  });
+}
+
+// --- Results Detailed Report Page ---
+function renderResults() {
+  const t = totalUp();
+  const search = norm($('#resultSearch').value || '');
+
+  let products = t.products.filter(p =>
+    !search || norm(p.product).includes(search) || norm(p.sku).includes(search)
+  );
+
+  if (state.filter === 'profit') products = products.filter(p => p.hasCost && p.profit >= 0);
+  if (state.filter === 'loss') products = products.filter(p => p.hasCost && p.profit < 0);
+  if (state.filter === 'missing') products = products.filter(p => !p.hasCost);
+
+  $('#resultSub').textContent = state.isDemo
+    ? '가상 예시 정산 데이터로 산출된 리포트입니다.'
+    : t.products.length
+      ? `${fmt(t.products.length)}개 상품 · ${fmt(state.transactions.length)}개 주문 데이터 기반`
+      : '업로드된 데이터를 기반으로 분석합니다.';
+
+  $('#resultCount').textContent = `${products.length}개 상품`;
+
+  $('#resultNotice').innerHTML = t.products.length ? `
+    <div class="alert alert-info">
+      <span>ⓘ</span>
+      <div>
+        <strong>요약:</strong> 전체 ${t.products.length}개 상품 중 ${t.knownCount}개 상품에 원가가 연결되어 추정 순이익 <strong>${won(t.profit)}</strong> (마진율 ${fmt(t.margin, 1)}%)이 계산되었습니다.
+        ${t.missing > 0 ? `<br><span style="color:var(--amber); font-weight:700">원가 미등록 상품 ${t.missing}개는 이익 계산에서 제외되었습니다.</span>` : ''}
+      </div>
+    </div>
+  ` : '';
+
+  const container = $('#resultTable');
+  container.innerHTML = renderTableHtml(products);
+  bindTableSortEvents(container);
+
+  const notes = [
+    ['₩', '추정 순이익의 정의', '상품 매출에서 환불액, 등록 원가, 플랫폼 수수료, 배송비, 광고비, 기타 잡비를 차감한 공헌 이익입니다. 세금계산서 발행분 및 세무 신고 내역과 차이가 있을 수 있습니다.'],
+    ['!', '환불·취소액 중복 차감 확인', '스마트스토어 등 일부 정산서는 이미 환불이 차감된 순결제금액을 제공합니다. 이 경우 매핑 단계에서 환불 열을 제외해야 이중 차감을 방지할 수 있습니다.'],
+    ['↕', '비용의 부호 처리', '수수료, 배송비, 광고비 등이 엑셀에서 음수(-)로 적혀 있어도 시스템이 자동으로 비용(절댓값)으로 인식하여 차감합니다.'],
+    ['i', '원가 단위 및 묶음 판매', '주문 수량에 단위원가를 곱하여 총 원가를 산출합니다. 1+1 기획 상품이나 옵션별 원가가 크게 다른 경우 상품 코드(SKU) 단위로 원가를 분리해 등록하세요.']
+  ];
+
+  $('#calcNotes').innerHTML = notes.map(([i, t, d]) => `
+    <div class="insight">
+      <div class="insight-icon">${i}</div>
+      <div><strong>${t}</strong><p>${d}</p></div>
+    </div>
+  `).join('');
+}
+
+// --- Mapping & Import Setup ---
+function renderMappings(containerId, headers, defs, map) {
+  const el = $('#' + containerId);
+  el.innerHTML = defs.map(d => `
+    <div class="field">
+      <label>
+        ${esc(d.label)}
+        ${d.required ? '<span style="color:var(--red)">*</span>' : '<span class="muted">선택</span>'}
+      </label>
+      <select class="select mapping-select" data-map-key="${d.key}" data-map-type="${containerId === 'salesMappings' ? 'sales' : 'cost'}">
+        <option value="">(선택 안 함)</option>
+        ${headers.map(h => `<option value="${esc(h)}" ${map[d.key] === h ? 'selected' : ''}>${esc(h)}</option>`).join('')}
+      </select>
+    </div>
+  `).join('');
+
+  $$('.mapping-select', el).forEach(sel => {
+    sel.addEventListener('change', () => {
+      const target = sel.dataset.mapType === 'sales' ? state.salesMap : state.costMap;
+      target[sel.dataset.mapKey] = sel.value;
+      if (sel.dataset.mapType === 'sales') {
+        saveMappingPreset(state.salesMap);
+      }
+    });
+  });
+}
+
+function renderPreview(headers, rows, elId) {
+  const el = $('#' + elId);
+  if (!headers.length) {
+    el.innerHTML = '<p class="muted tiny">미리보기를 표시할 수 없습니다.</p>';
+    return;
+  }
+  const showHeaders = headers.slice(0, 10);
+  el.innerHTML = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          ${showHeaders.map(h => `<th>${esc(h)}</th>`).join('')}
+          ${headers.length > 10 ? '<th>…</th>' : ''}
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.slice(0, 5).map(r => `
+          <tr>
+            ${showHeaders.map(h => `<td>${esc(String(r[h] ?? ''))}</td>`).join('')}
+            ${headers.length > 10 ? '<td>…</td>' : ''}
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function updateMappingUI() {
+  const ready = state.salesHeaders.length > 0;
+  $('#mappingPanel').classList.toggle('hidden', !ready);
+  $('#importTip').classList.toggle('hidden', ready);
+
+  $('#salesSheetBlock').classList.toggle('hidden', !(state.salesWorkbook && state.salesWorkbook.SheetNames.length > 1));
+  $('#costSheetBlock').classList.toggle('hidden', !(state.costWorkbook && state.costWorkbook.SheetNames.length > 1));
+
+  if (ready) {
+    renderMappings('salesMappings', state.salesHeaders, fieldDefs, state.salesMap);
+    renderPreview(state.salesHeaders, state.salesRows, 'salesPreview');
+  }
+
+  if (state.costHeaders.length) {
+    $('#costMappingSection').classList.remove('hidden');
+    renderMappings('costMappings', state.costHeaders, costFieldDefs, state.costMap);
+  } else {
+    $('#costMappingSection').classList.add('hidden');
+  }
+}
+
+function updateFileStatus(type) {
+  const isSales = type === 'sales';
+  const wb = isSales ? state.salesWorkbook : state.costWorkbook;
+  const name = isSales ? state.salesFileName : state.costFileName;
+  const el = $('#' + type + 'FileStatus');
+
+  if (!wb) {
+    el.innerHTML = '';
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="file-status">
+      <span>✓</span>
+      <span class="name">${esc(name)}</span>
+      <span>${wb.SheetNames.length}개 시트</span>
+      <button class="remove" title="파일 제거" data-remove-file="${type}">×</button>
+    </div>
+  `;
+
+  $('[data-remove-file="' + type + '"]', el).onclick = () => {
+    if (isSales) {
+      state.salesWorkbook = null;
+      state.salesRows = [];
+      state.salesHeaders = [];
+      state.salesFileName = '';
+      state.salesMap = {};
+    } else {
+      state.costWorkbook = null;
+      state.costRows = [];
+      state.costHeaders = [];
+      state.costFileName = '';
+      state.costMap = {};
+    }
+    updateFileStatus(type);
+    updateMappingUI();
+  };
+}
+
+function setWorkbook(type, wb, fileName) {
+  const isSales = type === 'sales';
+  const preset = loadMappingPreset();
+
+  if (isSales) {
+    state.salesWorkbook = wb;
+    state.salesFileName = fileName;
+    state.salesSheetName = wb.SheetNames[0];
+    $('#salesSheet').innerHTML = wb.SheetNames.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    loadSheet('sales', state.salesSheetName, preset);
+  } else {
+    state.costWorkbook = wb;
+    state.costFileName = fileName;
+    state.costSheetName = wb.SheetNames[0];
+    $('#costSheet').innerHTML = wb.SheetNames.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    loadSheet('cost', state.costSheetName);
+  }
+
+  updateFileStatus(type);
+  updateMappingUI();
+  toast(isSales ? '정산 파일을 읽었습니다. 매핑을 확인하세요.' : '원가 파일을 읽었습니다. 매핑을 확인하세요.');
+}
+
+function loadSheet(type, name, preset = {}) {
+  const wb = type === 'sales' ? state.salesWorkbook : state.costWorkbook;
+  if (!wb) return;
+
+  const res = sheetToRows(wb, name);
+  if (type === 'sales') {
+    state.salesSheetName = name;
+    state.salesHeaders = res.headers;
+    state.salesRows = res.rows;
+    state.salesMap = detectMaps(res.headers, fieldDefs, preset);
+  } else {
+    state.costSheetName = name;
+    state.costHeaders = res.headers;
+    state.costRows = res.rows;
+    state.costMap = detectMaps(res.headers, costFieldDefs);
+  }
+  updateMappingUI();
+}
+
+function importFile(type, file) {
+  if (!file) return;
+  if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
+    toast('XLSX, XLS 또는 CSV 파일을 선택해 주세요.');
+    return;
+  }
+  readFile(file, (err, wb) => {
+    if (err) {
+      toast(err.message || '파일을 파싱하지 못했습니다.');
+      return;
+    }
+    if (!wb.SheetNames || !wb.SheetNames.length) {
+      toast('파일에 데이터 시트가 없습니다.');
+      return;
+    }
+    setWorkbook(type, wb, file.name);
+  });
+}
+
+function processImport() {
+  const m = ingestSalesRows(state.salesRows, state.salesMap);
+  if (!m.ok) {
+    toast(m.error);
+    return;
+  }
+
+  if (state.costRows.length) {
+    const c = ingestCostRows(state.costRows, state.costMap);
+    if (!c.ok) {
+      toast('원가 파일 매핑을 다시 확인해 주세요.');
+      return;
+    }
+  }
+
+  state.transactions = m.rows;
+  state.isDemo = false;
+
+  $('#step1').classList.add('done');
+  $('#step2').classList.add('done');
+  $('#step3').classList.add('active');
+
+  toast(`${m.rows.length}개 정산 행을 성공적으로 분석했습니다.`);
+  renderDashboard();
+  renderProducts();
+  renderResults();
+  setPage('results');
+
+  if (m.skipped > 0) {
+    showModal(
+      '일부 누락 행 안내',
+      `${m.skipped}개 행은 상품명이 비어 있거나 매출액 숫자가 없어 분석에서 제외되었습니다. 원본 엑셀의 빈 행이나 소계/합계 행인지 확인하세요.`
+    );
+  }
+}
+
+// --- Demo Data ---
+function loadDemo() {
+  state.isDemo = true;
+  state.salesWorkbook = null;
+  state.costWorkbook = null;
+  state.salesFileName = '스마트스토어_정산내역_샘플.csv';
+  state.costFileName = '상품_원가표_샘플.csv';
+
+  state.salesRows = [
+    { '상품명': '고휘도 LED 감성 캠핑 랜턴', '상품코드': 'CP-001', '상품 매출': 597000, '판매 수량': 30, '판매 수수료': 35820, '판매자 배송비': 18000, '광고비': 36000, '환불 조정액': 19900, '기타 비용': 0 },
+    { '상품명': '감성 방수 수납 파우치 세트', '상품코드': 'ST-010', '상품 매출': 450000, '판매 수량': 50, '판매 수수료': 27000, '판매자 배송비': 25000, '광고비': 18000, '환불 조정액': 0, '기타 비용': 1500 },
+    { '상품명': '스테인리스 보온보냉 텀블러 500ml', '상품코드': 'TB-050', '상품 매출': 720000, '판매 수량': 48, '판매 수수료': 43200, '판매자 배송비': 36000, '광고비': 95000, '환불 조정액': 45000, '기타 비용': 0 },
+    { '상품명': '초경량 블루투스 셀카봉 삼각대', '상품코드': 'TR-006', '상품 매출': 185000, '판매 수량': 37, '판매 수수료': 11100, '판매자 배송비': 18500, '광고비': 38000, '환불 조정액': 0, '기타 비용': 3000 },
+    { '상품명': '프리미엄 퀵 차지 고속충전 케이블', '상품코드': 'CB-990', '상품 매출': 120000, '판매 수량': 20, '판매 수수료': 7200, '판매자 배송비': 12000, '광고비': 0, '환불 조정액': 0, '기타 비용': 0 },
+    { '상품명': '휴대용 미니 실리콘 물병', '상품코드': 'WB-101', '상품 매출': 99000, '판매 수량': 11, '판매 수수료': 5940, '판매자 배송비': 6600, '광고비': 5000, '환불 조정액': 0, '기타 비용': 0 }
+  ];
+
+  state.salesHeaders = Object.keys(state.salesRows[0]);
+  state.salesMap = detectMaps(state.salesHeaders, fieldDefs);
+  state.transactions = ingestSalesRows(state.salesRows, state.salesMap).rows;
+
+  const demoCosts = [
+    ['고휘도 LED 감성 캠핑 랜턴', 'CP-001', 9200],
+    ['감성 방수 수납 파우치 세트', 'ST-010', 4100],
+    ['스테인리스 보온보냉 텀블러 500ml', 'TB-050', 10500],
+    ['초경량 블루투스 셀카봉 삼각대', 'TR-006', 4200],
+    ['프리미엄 퀵 차지 고속충전 케이블', 'CB-990', 2500]
+  ];
+
+  demoCosts.forEach(([product, sku, unitCost]) => {
+    state.costs.set(`sku:${sku}`, { product, sku, unitCost });
+  });
+  saveCostsToStorage();
+
+  updateFileStatus('sales');
+  updateFileStatus('cost');
+  updateMappingUI();
+
+  $('#step1').classList.add('done');
+  $('#step2').classList.add('done');
+  $('#step3').classList.add('done');
+
+  renderDashboard();
+  renderProducts();
+  renderResults();
+  toast('가상 예시 데이터를 불러왔습니다.');
+  setPage('dashboard');
+}
+
+// --- CSV Downloads & Templates ---
+function csvCell(v) {
+  let s = String(v ?? '');
+  if (/[",\r\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function downloadBlob(content, name, type = 'text/csv;charset=utf-8;') {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+function downloadSalesTemplate() {
+  const rows = [
+    ['상품명', '상품코드', '상품 매출', '판매 수량', '판매 수수료', '판매자 배송비', '광고비', '환불 조정액', '기타 비용'],
+    ['캠핑 랜턴 LED', 'SKU-001', 300000, 10, 18000, 15000, 10000, 0, 0],
+    ['보온 텀블러', 'SKU-002', 450000, 15, 27000, 22500, 15000, 30000, 0]
+  ];
+  downloadBlob('\ufeff' + rows.map(r => r.map(csvCell).join(',')).join('\r\n'), 'marginkit-sales-template.csv');
+  toast('정산 샘플 CSV 양식을 다운로드했습니다.');
+}
+
+function downloadCostTemplate() {
+  const rows = [
+    ['상품명', '상품코드', '단위당 매입 원가'],
+    ['캠핑 랜턴 LED', 'SKU-001', 12000],
+    ['보온 텀블러', 'SKU-002', 15000]
+  ];
+  downloadBlob('\ufeff' + rows.map(r => r.map(csvCell).join(',')).join('\r\n'), 'marginkit-cost-template.csv');
+  toast('원가 샘플 CSV 양식을 다운로드했습니다.');
+}
+
+function exportCurrentProductsCostTemplate() {
+  const t = totalUp();
+  if (!t.products.length) {
+    downloadCostTemplate();
+    return;
+  }
+  const headers = ['상품명', '상품코드', '단위당 매입 원가'];
+  const rows = t.products.map(p => [p.product, p.sku, p.unitCost ?? '']);
+  const csv = '\ufeff' + [headers, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
+  downloadBlob(csv, `marginkit-products-costs-${new Date().toISOString().slice(0, 10)}.csv`);
+  toast('현재 분석된 상품 목록이 채워진 원가표를 다운로드했습니다.');
+}
+
+function downloadResults() {
+  const t = totalUp();
+  if (!t.products.length) {
+    toast('먼저 정산 데이터를 분석해 주세요.');
+    return;
+  }
+  const headers = [
+    '상품명', '상품코드', '판매수량', '총매출액', '환불조정액', '순매출액',
+    '단위원가', '총원가', '플랫폼수수료', '배송비', '광고비', '기타비용',
+    '총비용합계', '추정순이익', '추정마진율(%)', 'ROI(%)', '원가등록여부'
+  ];
+  const rows = t.products.map(p => [
+    p.product,
+    p.sku,
+    p.qty,
+    p.revenue,
+    p.refunds,
+    p.netRevenue,
+    p.unitCost ?? '',
+    p.cost ?? '',
+    p.commission,
+    p.shipping,
+    p.ads,
+    p.other,
+    p.fees + (p.cost ?? 0),
+    p.profit ?? '',
+    p.margin !== null ? p.margin.toFixed(1) : '',
+    p.roi !== null ? p.roi.toFixed(1) : '',
+    p.hasCost ? '등록됨' : '미등록'
+  ]);
+  const csv = '\ufeff' + [headers, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
+  downloadBlob(csv, `marginkit-report-${new Date().toISOString().slice(0, 10)}.csv`);
+  toast('분석 리포트 CSV를 다운로드했습니다.');
+}
+
+// --- Add Product Modal Handlers ---
+function openAddProductModal() {
+  $('#newProdName').value = '';
+  $('#newProdSku').value = '';
+  $('#newProdCost').value = '';
+  $('#addProductModalBackdrop').classList.add('show');
+  $('#newProdName').focus();
+}
+
+function closeAddProductModal() {
+  $('#addProductModalBackdrop').classList.remove('show');
+}
+
+function saveNewProduct() {
+  const name = $('#newProdName').value.trim();
+  const sku = $('#newProdSku').value.trim();
+  const cost = parseNum($('#newProdCost').value);
+
+  if (!name) {
+    toast('상품명을 입력해 주세요.');
+    $('#newProdName').focus();
+    return;
+  }
+  if (cost === null || cost < 0) {
+    toast('0 이상의 올바른 원가를 입력해 주세요.');
+    $('#newProdCost').focus();
+    return;
+  }
+
+  const key = sku ? `sku:${sku}` : `name:${norm(name)}`;
+  state.costs.set(key, { product: name, sku, unitCost: cost });
+  saveCostsToStorage();
+
+  closeAddProductModal();
+  renderProducts();
+  renderDashboard();
+  renderResults();
+  toast(`'${name}' 상품 원가를 저장했습니다.`);
+}
+
+// --- Event Listeners & Bindings ---
+$$('.nav-item[data-page]').forEach(b => b.addEventListener('click', () => setPage(b.dataset.page)));
+
+$('#btnStartImport').onclick = () => setPage('import');
+$('#btnAllResults').onclick = () => setPage('results');
+$('#btnDemo').onclick = loadDemo;
+$('#btnDemoImport').onclick = loadDemo;
+
+$('#btnDownloadSalesTpl').onclick = downloadSalesTemplate;
+$('#btnDownloadCostTpl').onclick = downloadCostTemplate;
+$('#btnImportTpl').onclick = downloadSalesTemplate;
+$('#btnExportCurrentCostTpl').onclick = exportCurrentProductsCostTemplate;
+$('#btnExportCurrentCost').onclick = exportCurrentProductsCostTemplate;
+$('#btnExportCosts').onclick = exportCurrentProductsCostTemplate;
+$('#btnExport').onclick = downloadResults;
+
+$('#btnAddProduct').onclick = openAddProductModal;
+$('#btnCancelAddProd').onclick = closeAddProductModal;
+$('#btnSaveAddProd').onclick = saveNewProduct;
+$('#btnCostImport').onclick = () => { setPage('import'); $('#costFile').click(); };
+
+$('#chartSortRevenue').onclick = () => {
+  state.chartMetric = 'revenue';
+  $('#chartSortRevenue').classList.add('active');
+  $('#chartSortProfit').classList.remove('active');
+  renderSalesChart(state.products);
+};
+$('#chartSortProfit').onclick = () => {
+  state.chartMetric = 'profit';
+  $('#chartSortProfit').classList.add('active');
+  $('#chartSortRevenue').classList.remove('active');
+  renderSalesChart(state.products);
+};
+
+$('#btnReset').onclick = () => {
+  if (confirm('현재 업로드한 데이터와 등록된 상품 원가를 모두 초기화하시겠습니까?')) {
+    Object.assign(state, {
+      salesWorkbook: null, costWorkbook: null,
+      salesFileName: '', costFileName: '',
+      salesRows: [], costRows: [],
+      salesHeaders: [], costHeaders: [],
+      salesMap: {}, costMap: {},
+      transactions: [], products: [],
+      costs: new Map(), isDemo: false
+    });
+    localStorage.removeItem(STORAGE_KEY_COSTS);
+    $('#salesFile').value = '';
+    $('#costFile').value = '';
+    ['sales', 'cost'].forEach(updateFileStatus);
+    $('#step1').classList.remove('done');
+    $('#step2').classList.remove('done');
+    $('#step3').classList.remove('done', 'active');
+    updateMappingUI();
+    renderDashboard();
+    renderProducts();
+    renderResults();
+    setPage('dashboard');
+    toast('모든 데이터와 원가 설정이 초기화되었습니다.');
+  }
+};
+
+$('#salesDrop').onclick = () => $('#salesFile').click();
+$('#costDrop').onclick = () => $('#costFile').click();
+
+$('#salesFile').addEventListener('change', e => importFile('sales', e.target.files[0]));
+$('#costFile').addEventListener('change', e => importFile('cost', e.target.files[0]));
+
+[['salesDrop', 'sales'], ['costDrop', 'cost']].forEach(([id, type]) => {
+  const el = $('#' + id);
+  ['dragenter', 'dragover'].forEach(ev => el.addEventListener(ev, e => {
+    e.preventDefault();
+    el.classList.add('dragover');
+  }));
+  ['dragleave', 'drop'].forEach(ev => el.addEventListener(ev, e => {
+    e.preventDefault();
+    el.classList.remove('dragover');
+  }));
+  el.addEventListener('drop', e => {
+    const f = e.dataTransfer.files[0];
+    if (f) importFile(type, f);
+  });
+});
+
+$('#salesSheet').addEventListener('change', e => loadSheet('sales', e.target.value));
+$('#costSheet').addEventListener('change', e => loadSheet('cost', e.target.value));
+$('#btnProcessImport').onclick = processImport;
+$('#btnCancelImport').onclick = () => setPage('dashboard');
+
+$('#productSearch').addEventListener('input', renderProducts);
+$('#resultSearch').addEventListener('input', renderResults);
+
+$$('.filter-btn').forEach(b => b.onclick = () => {
+  state.filter = b.dataset.filter;
+  $$('.filter-btn').forEach(x => x.classList.toggle('active', x === b));
+  renderResults();
+});
+
+$('#btnHelp').onclick = () => showModal(
+  '마진킷 사용 가이드 및 도움말',
+  '1. 정산 파일 업로드:\n' +
+  '• 네이버 스마트스토어, 쿠팡, 지마켓 등에서 다운로드한 판매/정산 엑셀(XLSX/XLS) 또는 CSV 파일을 업로드합니다.\n' +
+  '• 한글 깨짐 방지 기능이 내장되어 있어 EUC-KR 파일도 자동으로 올바르게 인식됩니다.\n\n' +
+  '2. 열(Column) 매핑 확인:\n' +
+  '• [상품명]과 [상품 매출]은 필수입니다.\n' +
+  '• 수수료, 배송비, 광고비 등은 정산 파일에 해당 열이 존재하는 경우에만 선택하세요.\n' +
+  '• 이미 환불이나 수수료가 공제된 순매출을 선택한 경우, 환불/수수료 열을 다시 선택하면 이중 차감되므로 주의하세요.\n\n' +
+  '3. 상품 원가 입력:\n' +
+  '• 원가 엑셀 파일을 함께 업로드하거나, [상품 원가 관리] 메뉴에서 직접 단위원가를 입력할 수 있습니다.\n' +
+  '• 입력된 원가는 브라우저에 자동 저장되므로 다음 번 접속 시에도 그대로 유지됩니다.\n\n' +
+  '4. 분석 결과 및 의사결정:\n' +
+  '• 순이익, 마진율(%), 적자 여부를 확인하고 필요 시 CSV 결과 보고서를 내려받으세요.'
+);
+
+$('#modalClose').onclick = () => $('#modalBackdrop').classList.remove('show');
+$('#modalBackdrop').addEventListener('click', e => {
+  if (e.target.id === 'modalBackdrop') $('#modalBackdrop').classList.remove('show');
+});
+$('#addProductModalBackdrop').addEventListener('click', e => {
+  if (e.target.id === 'addProductModalBackdrop') closeAddProductModal();
+});
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    $('#modalBackdrop').classList.remove('show');
+    closeAddProductModal();
+  }
+});
+
+// Initial boot
+renderDashboard();
+renderProducts();
+renderResults();
+
+})();
+</script>
+<div class="ov-wrap" style="padding:0 18px 24px">
+  <div class="ov-notice">
+    <strong>이 버전은 ORVANTRO(오르반트로) 베타입니다.</strong>
+    프리미엄 기능을 미리 볼 수 있지만 실제 결제·구독·거래는 아직 불가능합니다.
+    먼저 체험해 보신 뒤 아래 피드백을 남겨 주세요. 반영해 정식 출시에 반영합니다.
+  </div>
+  <section class="ov-premium" aria-label="Premium 미리보기">
+    <h3>Premium (미리보기 · 잠금)</h3>
+    <p>베타에서는 UI만 공개합니다. 결제·계정 연동은 준비 중입니다.</p>
+    <ul>
+          <li>자동 원가 매칭 규칙</li>
+          <li>팀 워크스페이스</li>
+          <li>예약 리포트 메일 (출시 예정)</li>
+    </ul>
+    <span class="ov-lock">🔒 실제 거래/결제 비활성 · 정식 출시 예정</span>
+  </section>
+  <section class="ov-feedback" id="feedback" aria-label="베타 피드백">
+    <h3>베타 피드백</h3>
+    <p class="lead">먼저 체험해 보시고, 불편한 점·필요한 기능을 알려 주세요. 메일 앱이 열립니다.</p>
+    <form onsubmit="return orvantroSubmitFeedback(this)">
+      <div class="grid">
+        <div>
+          <label for="ov-product">제품</label>
+          <input id="ov-product" name="product" value="MarginKit" readonly>
+        </div>
+        <div>
+          <label for="ov-rating">만족도</label>
+          <select id="ov-rating" name="rating" required>
+            <option value="">선택</option>
+            <option>매우 만족</option>
+            <option>만족</option>
+            <option>보통</option>
+            <option>아쉬움</option>
+            <option>개선 필요</option>
+          </select>
+        </div>
+        <div>
+          <label for="ov-email">회신 이메일 (선택)</label>
+          <input id="ov-email" name="email" type="email" placeholder="you@example.com">
+        </div>
+        <div class="full">
+          <label for="ov-body">피드백 내용</label>
+          <textarea id="ov-body" name="body" required placeholder="예: 이런 입력값이 더 필요해요 / 결과 해석이 어려워요"></textarea>
+        </div>
+      </div>
+      <div class="actions">
+        <button type="submit">피드백 메일 보내기</button>
+        <span class="hint">수신: judanvy8@gmail.com</span>
+      </div>
+    </form>
+  </section>
+  <footer class="ov-foot">
+    <span class="made">Made by ORVANTRO (오르반트로)</span>
+    <a href="http://orvantro.com/">공식 홈페이지로 돌아가기 →</a>
+  </footer>
+</div>
+
+<script>
+function orvantroSubmitFeedback(form){
+  const fd=new FormData(form);
+  const product=fd.get('product')||document.title||'ORVANTRO';
+  const rating=fd.get('rating')||'';
+  const email=fd.get('email')||'';
+  const body=fd.get('body')||'';
+  const subject=encodeURIComponent('[ORVANTRO 베타 피드백] '+product+' / '+rating);
+  const text=encodeURIComponent('제품: '+product+'\n만족도: '+rating+'\n회신 이메일: '+(email||'(없음)')+'\n\n피드백:\n'+body+'\n\n— '+location.href);
+  window.location.href='mailto:judanvy8@gmail.com?subject='+subject+'&body='+text;
+  return false;
+}
+</script>
+<script>window.ORVANTRO_ANALYTICS = { site: 'marginkit-pro-beta' };</script>
+<script src="./orvantro-analytics.js" defer></script>
+</body>
+</html>
