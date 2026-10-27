@@ -1278,12 +1278,24 @@ function loadCostsFromStorage() {
 }
 
 function saveCostsToStorage() {
+  // F01: demo mutations stay in-memory only and must not touch real persisted costs.
+  if (state.isDemo) return;
   try {
     const arr = [...state.costs.entries()];
     localStorage.setItem(STORAGE_KEY_COSTS, JSON.stringify(arr));
   } catch(e) {
     console.error('Failed to save costs to localStorage', e);
   }
+}
+
+function restoreCostsFromStorage() {
+  state.costs = loadCostsFromStorage();
+}
+
+function exitDemoMode() {
+  if (!state.isDemo) return;
+  state.isDemo = false;
+  restoreCostsFromStorage();
 }
 
 function saveMappingPreset(map) {
@@ -2381,6 +2393,9 @@ function importFile(type, file) {
 }
 
 function processImport() {
+  // Leave demo before ingesting so real cost persistence stays intact.
+  exitDemoMode();
+
   const m = ingestSalesRows(state.salesRows, state.salesMap);
   if (!m.ok) {
     toast(m.error);
@@ -2418,6 +2433,10 @@ function processImport() {
 
 // --- Demo Data ---
 function loadDemo() {
+  // Flush real costs first, then switch to an in-memory demo map.
+  if (!state.isDemo) {
+    saveCostsToStorage();
+  }
   state.isDemo = true;
   state.salesWorkbook = null;
   state.costWorkbook = null;
@@ -2445,10 +2464,11 @@ function loadDemo() {
     ['프리미엄 퀵 차지 고속충전 케이블', 'CB-990', 2500]
   ];
 
+  state.costs = new Map();
   demoCosts.forEach(([product, sku, unitCost]) => {
     state.costs.set(`sku:${sku}`, { product, sku, unitCost });
   });
-  saveCostsToStorage();
+  // Intentionally do not call saveCostsToStorage() in demo mode.
 
   updateFileStatus('sales');
   updateFileStatus('cost');
@@ -2628,6 +2648,7 @@ $('#chartSortProfit').onclick = () => {
 
 $('#btnReset').onclick = () => {
   if (confirm('현재 업로드한 데이터와 등록된 상품 원가를 모두 초기화하시겠습니까?')) {
+    const leavingDemo = state.isDemo;
     Object.assign(state, {
       salesWorkbook: null, costWorkbook: null,
       salesFileName: '', costFileName: '',
@@ -2635,9 +2656,13 @@ $('#btnReset').onclick = () => {
       salesHeaders: [], costHeaders: [],
       salesMap: {}, costMap: {},
       transactions: [], products: [],
-      costs: new Map(), isDemo: false
+      // Demo exit restores persisted real costs; real reset clears them.
+      costs: leavingDemo ? loadCostsFromStorage() : new Map(),
+      isDemo: false
     });
-    localStorage.removeItem(STORAGE_KEY_COSTS);
+    if (!leavingDemo) {
+      localStorage.removeItem(STORAGE_KEY_COSTS);
+    }
     $('#salesFile').value = '';
     $('#costFile').value = '';
     ['sales', 'cost'].forEach(updateFileStatus);
@@ -2649,7 +2674,9 @@ $('#btnReset').onclick = () => {
     renderProducts();
     renderResults();
     setPage('dashboard');
-    toast('모든 데이터와 원가 설정이 초기화되었습니다.');
+    toast(leavingDemo
+      ? '예시 데이터를 종료했습니다. 저장된 실제 원가는 유지됩니다.'
+      : '모든 데이터와 원가 설정이 초기화되었습니다.');
   }
 };
 

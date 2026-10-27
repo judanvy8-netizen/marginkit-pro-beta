@@ -1,0 +1,27 @@
+{
+  "name": "marginkit-pro-beta",
+  "version": "1.0.0",
+  "description": "",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test:f01": "node tests/f01-demo-cost-isolation.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/judanvy8-netizen/marginkit-pro-beta.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/judanvy8-netizen/marginkit-pro-beta/issues"
+  },
+  "homepage": "https://github.com/judanvy8-netizen/marginkit-pro-beta#readme",
+  "devDependencies": {
+    "playwright": "^1.64.1"
+  },
+  "private": true,
+  "type": "module"
+}
