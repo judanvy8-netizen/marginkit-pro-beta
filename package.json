@@ -1,0 +1,5 @@
+{
+  "name": "marginkit-pro-beta",
+  "private": true,
+  "scripts": { "test": "node tests/import-regression.mjs && node tests/security-regression.mjs" }
+}
