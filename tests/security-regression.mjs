@@ -7,13 +7,14 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-const between = (a, b) => html.slice(html.indexOf(a), html.indexOf(b, html.indexOf(a)));
+const source = fs.readFileSync(path.join(root, 'import-parser.js'), 'utf8') + '\n' + fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+const between = (a, b) => source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a)));
 const context = vm.createContext({window: {}, FileReader: class { constructor() { throw Error('must reject before file read'); } }});
-vm.runInContext(between('const MAX_IMPORT_BYTES', '// --- Navigation ---') + between('function csvCell(v)', 'function downloadBlob') + between('function parseNum(v)', 'function norm(s)'), context);
+vm.runInContext(fs.readFileSync(path.join(root, 'import-parser.js'), 'utf8') + between('function readFile(file, cb)', '// --- Navigation ---') + between('function csvCell(v)', 'function downloadBlob') + between('function parseNum(v)', 'function norm(s)'), context);
 vm.runInContext(between('function ingestSalesRows(rows, map)', 'function ingestCostRows('), context);
 let passed = 0;
 function check(name, fn) { fn(); passed++; console.log('PASS', name); }
-check('all inline scripts parse', () => { for (const script of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) new vm.Script(script[1]); });
+check('external application scripts parse and inline execution is forbidden', () => { for (const file of ['app.js','import-parser.js','import-worker.js','feedback.js']) new vm.Script(fs.readFileSync(path.join(root,file),'utf8')); assert.doesNotMatch(html, /<script>\s*[^<]|\son(?:click|submit)=/i); assert.ok(html.includes("script-src-attr 'none'")); assert.ok(!html.includes("script-src 'self' 'unsafe-inline'")); });
 check('no remote analytics or remote executable dependencies', () => { assert.doesNotMatch(html, /amplitude|<script[^>]+src=["']https?:/i); });
 check('vendored library version and source digest', () => {
   const bytes = fs.readFileSync(path.join(root, 'vendor/xlsx-0.20.3.full.min.js'));
@@ -32,6 +33,9 @@ check('CSV fallback handles BOM, escaped quotes and quoted newlines without XLSX
   assert.equal(data.rows[0]['상품명'], 'a\nb'); assert.equal(data.rows[0]['코드'], 'x"y');
 });
 check('unterminated CSV quotes are rejected', () => assert.throws(() => context.parseCsvToWorkbook('A,B\n"broken,1', 'x.csv'), /따옴표/));
+check('misplaced CSV quotes cannot silently rewrite numeric values', () => {
+  for (const csv of ['A,B\n1,12"3"', 'A,B\n1,"12"3']) assert.throws(() => context.parseCsvToWorkbook(csv, 'x.csv'), /따옴표/);
+});
 check('CSV row and column bounds reject over-limit files', () => {
   assert.throws(() => context.parseCsvToWorkbook(Array(202).fill('A').join(','), 'x.csv'), /열/);
   assert.throws(() => context.parseCsvToWorkbook('A\n' + '1\n'.repeat(20001), 'x.csv'), /행/);

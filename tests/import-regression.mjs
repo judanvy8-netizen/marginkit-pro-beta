@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SOURCE_PATH = path.join(ROOT, 'index.html');
+const SOURCE_PATH = path.join(ROOT, 'app.js');
 const BASE_COMMIT = '34ac6229d2b76e7a1878c70fcc989345430fafdc';
 const BASE_SOURCE_SHA256 = '5ef4f2cd936e4ac87c56c4904b7692218facb9f642f71cd0df31065b9d9b4c70';
 const V1_SOURCE_SHA256 = '9816e6c9d53914738afb5da19d9dad7f966262e42512457445a248d8956f1bcf';
