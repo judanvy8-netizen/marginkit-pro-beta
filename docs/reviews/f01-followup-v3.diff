@@ -1,0 +1,383 @@
+--- a/src/index.html
++++ b/src/index.html
+@@ -1292,6 +1292,16 @@
+   state.costs = loadCostsFromStorage();
+ }
+ 
++function invalidateImportReads(type) {
++  if (!state.importGeneration) state.importGeneration = { sales: 0, cost: 0 };
++  if (type) {
++    state.importGeneration[type] = (state.importGeneration[type] || 0) + 1;
++  } else {
++    state.importGeneration.sales = (state.importGeneration.sales || 0) + 1;
++    state.importGeneration.cost = (state.importGeneration.cost || 0) + 1;
++  }
++}
++
+ function exitDemoMode() {
+   if (!state.isDemo) return;
+   state.isDemo = false;
+@@ -1317,6 +1327,10 @@
+ const state = {
+   salesWorkbook: null,
+   costWorkbook: null,
++  salesSource: 'none',
++  costSource: 'none',
++  importGeneration: { sales: 0, cost: 0 },
++  importStatus: { sales: 'idle', cost: 'idle' },
+   salesFileName: '',
+   costFileName: '',
+   salesRows: [],
+@@ -1669,11 +1683,12 @@
+   return { ok: true, rows: parsed, skipped };
+ }
+ 
+-function ingestCostRows(rows, map) {
++function ingestCostRows(rows, map, baseCosts = state.costs) {
+   if (!map.product || !map.unitCost) {
+     return { ok: false, error: '원가 파일에서 상품명과 단위당 매입 원가 열을 지정해 주세요.' };
+   }
+ 
++  const costs = new Map(baseCosts);
+   let added = 0;
+   for (const row of rows) {
+     const product = String(row[map.product] ?? '').trim();
+@@ -1683,12 +1698,12 @@
+     if (!product || unitCost === null || unitCost < 0) continue;
+ 
+     const key = sku ? `sku:${sku}` : `name:${norm(product)}`;
+-    state.costs.set(key, { product, sku, unitCost });
++    costs.set(key, { product, sku, unitCost });
+     added++;
+   }
+ 
+-  if (added > 0) saveCostsToStorage();
+-  return { ok: added > 0, added };
++  if (added > 0) return { ok: true, added, costs };
++  return { ok: false, added: 0, costs, error: '원가 파일에서 유효한 상품과 원가를 찾지 못했습니다.' };
+ }
+ 
+ function getCost(p) {
+@@ -2237,7 +2252,7 @@
+     sel.addEventListener('change', () => {
+       const target = sel.dataset.mapType === 'sales' ? state.salesMap : state.costMap;
+       target[sel.dataset.mapKey] = sel.value;
+-      if (sel.dataset.mapType === 'sales') {
++      if (sel.dataset.mapType === 'sales' && !state.isDemo && state.salesSource === 'file') {
+         saveMappingPreset(state.salesMap);
+       }
+     });
+@@ -2292,43 +2307,70 @@
+   }
+ }
+ 
++function removeImportFile(type) {
++  if (type !== 'sales' && type !== 'cost') return;
++  const isSales = type === 'sales';
++  invalidateImportReads(type);
++  state.importStatus[type] = 'idle';
++  if (isSales) {
++    state.salesWorkbook = null;
++    state.salesSource = 'none';
++    state.salesRows = [];
++    state.salesHeaders = [];
++    state.salesFileName = '';
++    state.salesMap = {};
++  } else {
++    state.costWorkbook = null;
++    state.costSource = 'none';
++    state.costRows = [];
++    state.costHeaders = [];
++    state.costFileName = '';
++    state.costMap = {};
++  }
++  const input = $('#'+type+'File');
++  if (input) input.value = '';
++  updateFileStatus(type);
++  updateMappingUI();
++}
++
+ function updateFileStatus(type) {
+   const isSales = type === 'sales';
+   const wb = isSales ? state.salesWorkbook : state.costWorkbook;
+   const name = isSales ? state.salesFileName : state.costFileName;
++  const status = state.importStatus?.[type] || 'idle';
+   const el = $('#' + type + 'FileStatus');
+ 
+   if (!wb) {
+-    el.innerHTML = '';
++    if (!isSales && ['selected', 'reading', 'failed', 'cancelled'].includes(status)) {
++      const label = status === 'failed'
++        ? '\uC6D0\uAC00 \uD30C\uC77C \uC77D\uAE30 \uC2E4\uD328'
++        : status === 'cancelled'
++          ? '\uC6D0\uAC00 \uD30C\uC77C \uC120\uD0DD\uC774 \uCDE8\uC18C\uB428'
++          : status === 'reading'
++            ? '\uC6D0\uAC00 \uD30C\uC77C \uC77D\uB294 \uC911...'
++            : '\uC6D0\uAC00 \uD30C\uC77C \uC120\uD0DD\uB428';
++      const removeLabel = '\uC6D0\uAC00 \uD30C\uC77C \uC120\uD0DD \uC81C\uAC70';
++      el.innerHTML = '<div class="file-status"><span>' + label + '</span>' +
++        '<button class="remove" title="' + removeLabel + '" aria-label="' + removeLabel + '" data-remove-file="' + type + '">×</button></div>';
++      $('[data-remove-file="' + type + '"]', el).onclick = () => removeImportFile(type);
++    } else {
++      el.innerHTML = '';
++    }
+     return;
+   }
+ 
+-  el.innerHTML = `
+-    <div class="file-status">
+-      <span>✓</span>
+-      <span class="name">${esc(name)}</span>
+-      <span>${wb.SheetNames.length}개 시트</span>
+-      <button class="remove" title="파일 제거" data-remove-file="${type}">×</button>
+-    </div>
+-  `;
+-
+-  $('[data-remove-file="' + type + '"]', el).onclick = () => {
+-    if (isSales) {
+-      state.salesWorkbook = null;
+-      state.salesRows = [];
+-      state.salesHeaders = [];
+-      state.salesFileName = '';
+-      state.salesMap = {};
+-    } else {
+-      state.costWorkbook = null;
+-      state.costRows = [];
+-      state.costHeaders = [];
+-      state.costFileName = '';
+-      state.costMap = {};
+-    }
+-    updateFileStatus(type);
+-    updateMappingUI();
+-  };
++  const replacementStatus = !isSales && status === 'reading'
++    ? '<span>\uC0C8 \uD30C\uC77C\uC744 \uC77D\uB294 \uC911\uC785\uB2C8\uB2E4</span>'
++    : !isSales && ['failed', 'cancelled'].includes(status)
++      ? '<span>\uC6D0\uAC00 \uD30C\uC77C \uCC98\uB9AC\uAC00 \uD544\uC694\uD569\uB2C8\uB2E4</span>'
++      : '';
++  const removeLabel = isSales
++    ? '\uD310\uB9E4 \uD30C\uC77C \uC120\uD0DD \uC81C\uAC70'
++    : '\uC6D0\uAC00 \uD30C\uC77C \uC120\uD0DD \uC81C\uAC70';
++  el.innerHTML = '<div class="file-status"><span>✓</span><span class="name">' + esc(name) + '</span>' +
++    '<span>' + wb.SheetNames.length + '\uAC1C \uC2DC\uD2B8</span>' + replacementStatus +
++    '<button class="remove" title="' + removeLabel + '" aria-label="' + removeLabel + '" data-remove-file="' + type + '">×</button></div>';
++  $('[data-remove-file="' + type + '"]', el).onclick = () => removeImportFile(type);
+ }
+ 
+ function setWorkbook(type, wb, fileName) {
+@@ -2337,12 +2379,14 @@
+ 
+   if (isSales) {
+     state.salesWorkbook = wb;
++    state.salesSource = 'file';
+     state.salesFileName = fileName;
+     state.salesSheetName = wb.SheetNames[0];
+     $('#salesSheet').innerHTML = wb.SheetNames.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+     loadSheet('sales', state.salesSheetName, preset);
+   } else {
+     state.costWorkbook = wb;
++    state.costSource = 'file';
+     state.costFileName = fileName;
+     state.costSheetName = wb.SheetNames[0];
+     $('#costSheet').innerHTML = wb.SheetNames.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+@@ -2351,6 +2395,7 @@
+ 
+   updateFileStatus(type);
+   updateMappingUI();
++  state.importStatus[type] = 'ready';
+   toast(isSales ? '정산 파일을 읽었습니다. 매핑을 확인하세요.' : '원가 파일을 읽었습니다. 매핑을 확인하세요.');
+ }
+ 
+@@ -2374,27 +2419,87 @@
+ }
+ 
+ function importFile(type, file) {
+-  if (!file) return;
++  if (!state.importStatus) state.importStatus = { sales: 'idle', cost: 'idle' };
++  if (!file) {
++    invalidateImportReads(type);
++    state.importStatus[type] = 'cancelled';
++    updateFileStatus(type);
++    return;
++  }
++  const generation = (state.importGeneration[type] || 0) + 1;
++  state.importGeneration[type] = generation;
++  state.importStatus[type] = 'selected';
++  updateFileStatus(type);
+   if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
++    state.importStatus[type] = 'failed';
++        updateFileStatus(type);
+     toast('XLSX, XLS 또는 CSV 파일을 선택해 주세요.');
+     return;
+   }
+-  readFile(file, (err, wb) => {
+-    if (err) {
+-      toast(err.message || '파일을 파싱하지 못했습니다.');
+-      return;
++  state.importStatus[type] = 'reading';
++  updateFileStatus(type);
++  try {
++    readFile(file, (err, wb) => {
++      if (generation !== state.importGeneration[type]) return;
++      if (err) {
++        state.importStatus[type] = 'failed';
++        updateFileStatus(type);
++        toast(err.message || '파일을 파싱하지 못했습니다.');
++        return;
++      }
++      if (!wb || !wb.SheetNames || !wb.SheetNames.length) {
++        state.importStatus[type] = 'failed';
++        updateFileStatus(type);
++        toast('파일에 읽을 수 있는 시트가 없습니다.');
++        return;
++      }
++      try {
++        setWorkbook(type, wb, file.name);
++        state.importStatus[type] = 'ready';
++        updateFileStatus(type);
++      } catch(setupError) {
++        state.importStatus[type] = 'failed';
++        updateFileStatus(type);
++        toast(setupError.message || '파일 내용을 준비하지 못했습니다.');
++      }
++    });
++  } catch(readError) {
++    if (generation === state.importGeneration[type]) {
++      state.importStatus[type] = 'failed';
++        updateFileStatus(type);
++      toast(readError.message || '파일을 파싱하지 못했습니다.');
+     }
+-    if (!wb.SheetNames || !wb.SheetNames.length) {
+-      toast('파일에 데이터 시트가 없습니다.');
+-      return;
+-    }
+-    setWorkbook(type, wb, file.name);
+-  });
++  }
+ }
+ 
+ function processImport() {
+-  // Leave demo before ingesting so real cost persistence stays intact.
+-  exitDemoMode();
++  const salesStatus = state.importStatus?.sales || 'idle';
++  const costStatus = state.importStatus?.cost || 'idle';
++  if (salesStatus === 'selected' || salesStatus === 'reading') {
++    toast('판매 파일을 읽는 중입니다. 완료 후 분석해 주세요.');
++    return;
++  }
++  if (salesStatus === 'failed' || salesStatus === 'cancelled') {
++    toast('판매 파일을 다시 선택해 주세요.');
++    return;
++  }
++  if (salesStatus !== 'ready' || state.salesSource !== 'file' || !state.salesWorkbook) {
++    toast('실제 판매 파일을 먼저 업로드해 주세요.');
++    return;
++  }
++  if (['selected', 'reading'].includes(costStatus)) {
++    toast('판매/원가 파일 처리가 끝난 뒤 분석해 주세요.');
++    return;
++  }
++  if (costStatus === 'failed' || costStatus === 'cancelled') {
++    toast('원가 파일을 다시 선택하거나 입력을 취소해 주세요.');
++    return;
++  }
++  const costSelected = costStatus === 'ready' || state.costSource === 'file' || !!state.costWorkbook;
++  if (costSelected && (costStatus !== 'ready' || state.costSource !== 'file' || !state.costWorkbook)) {
++    toast('원가 파일 상태를 확인해 주세요.');
++    return;
++  }
+ 
+   const m = ingestSalesRows(state.salesRows, state.salesMap);
+   if (!m.ok) {
+@@ -2402,16 +2507,25 @@
+     return;
+   }
+ 
+-  if (state.costRows.length) {
+-    const c = ingestCostRows(state.costRows, state.costMap);
++  let nextCosts = state.isDemo ? loadCostsFromStorage() : new Map(state.costs);
++  let costImport = null;
++  if (costSelected) {
++    const c = ingestCostRows(state.costRows, state.costMap, nextCosts);
+     if (!c.ok) {
+       toast('원가 파일 매핑을 다시 확인해 주세요.');
+       return;
+     }
+-  }
+-
++    costImport = c;
++    nextCosts = c.costs;
++  }
++
++  // Commit only after all selected inputs have parsed and validated.
++  invalidateImportReads();
+   state.transactions = m.rows;
++  state.costs = nextCosts;
+   state.isDemo = false;
++  if (costImport?.added > 0) saveCostsToStorage();
++  saveMappingPreset(state.salesMap);
+ 
+   $('#step1').classList.add('done');
+   $('#step2').classList.add('done');
+@@ -2433,6 +2547,7 @@
+ 
+ // --- Demo Data ---
+ function loadDemo() {
++  invalidateImportReads();
+   // Flush real costs first, then switch to an in-memory demo map.
+   if (!state.isDemo) {
+     saveCostsToStorage();
+@@ -2440,6 +2555,14 @@
+   state.isDemo = true;
+   state.salesWorkbook = null;
+   state.costWorkbook = null;
++  state.salesSource = 'demo';
++  state.costSource = 'demo';
++  state.importStatus = { sales: 'idle', cost: 'idle' };
++  state.salesSheetName = '';
++  state.costRows = [];
++  state.costHeaders = [];
++  state.costSheetName = '';
++  state.costMap = {};
+   state.salesFileName = '스마트스토어_정산내역_샘플.csv';
+   state.costFileName = '상품_원가표_샘플.csv';
+ 
+@@ -2469,6 +2592,8 @@
+     state.costs.set(`sku:${sku}`, { product, sku, unitCost });
+   });
+   // Intentionally do not call saveCostsToStorage() in demo mode.
++  $('#salesFile').value = '';
++  $('#costFile').value = '';
+ 
+   updateFileStatus('sales');
+   updateFileStatus('cost');
+@@ -2648,9 +2773,12 @@
+ 
+ $('#btnReset').onclick = () => {
+   if (confirm('현재 업로드한 데이터와 등록된 상품 원가를 모두 초기화하시겠습니까?')) {
++    invalidateImportReads();
+     const leavingDemo = state.isDemo;
+     Object.assign(state, {
+       salesWorkbook: null, costWorkbook: null,
++      salesSource: 'none', costSource: 'none',
++      importStatus: { sales: 'idle', cost: 'idle' },
+       salesFileName: '', costFileName: '',
+       salesRows: [], costRows: [],
+       salesHeaders: [], costHeaders: [],
+@@ -2705,7 +2833,15 @@
+ $('#salesSheet').addEventListener('change', e => loadSheet('sales', e.target.value));
+ $('#costSheet').addEventListener('change', e => loadSheet('cost', e.target.value));
+ $('#btnProcessImport').onclick = processImport;
+-$('#btnCancelImport').onclick = () => setPage('dashboard');
++$('#btnCancelImport').onclick = () => {
++  invalidateImportReads();
++  ['sales', 'cost'].forEach(type => {
++    if (state.importStatus[type] === 'selected' || state.importStatus[type] === 'reading') {
++      state.importStatus[type] = 'cancelled';
++    }
++  });
++  setPage('dashboard');
++};
+ 
+ $('#productSearch').addEventListener('input', renderProducts);
+ $('#resultSearch').addEventListener('input', renderResults);
