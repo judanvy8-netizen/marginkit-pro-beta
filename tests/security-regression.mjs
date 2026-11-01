@@ -10,6 +10,7 @@ const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const source = fs.readFileSync(path.join(root, 'import-parser.js'), 'utf8') + '\n' + fs.readFileSync(path.join(root, 'app.js'), 'utf8');
 const between = (a, b) => source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a)));
 const context = vm.createContext({window: {}, FileReader: class { constructor() { throw Error('must reject before file read'); } }});
+vm.runInContext(fs.readFileSync(path.join(root, 'exact-decimal.js'), 'utf8'), context);
 vm.runInContext(fs.readFileSync(path.join(root, 'import-parser.js'), 'utf8') + between('function readFile(file, cb)', '// --- Navigation ---') + between('function csvCell(v)', 'function downloadBlob') + between('function parseNum(v)', 'function norm(s)'), context);
 vm.runInContext(between('function ingestSalesRows(rows, map)', 'function ingestCostRows('), context);
 let passed = 0;

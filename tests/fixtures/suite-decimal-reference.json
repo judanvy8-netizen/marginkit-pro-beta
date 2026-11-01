@@ -1,0 +1,967 @@
+{
+  "generator": "Python fractions.Fraction from Decimal input strings, seed20261031",
+  "simulator": [
+    {
+      "input": {
+        "sell": "29900",
+        "cost": "13200",
+        "ship": "3000",
+        "ad": "2500",
+        "fixed": "500",
+        "feePct": "5.8",
+        "units": "200",
+        "targetPct": "25",
+        "reservePct": "0",
+        "reserveEnabled": false
+      },
+      "exact": {
+        "fee": "1734.2",
+        "reserve": "0",
+        "beforeAd": "11465.8",
+        "profit": "8965.8",
+        "cashProfit": "8965.8",
+        "monthly": "1793160",
+        "monthlyRevenue": "5980000",
+        "totalCost": "20934.2"
+      },
+      "targetPrice": 27746
+    },
+    {
+      "input": {
+        "sell": ".3",
+        "cost": ".1",
+        "ship": ".2",
+        "ad": "0",
+        "fixed": "0",
+        "feePct": "0",
+        "units": "1.5",
+        "targetPct": "25",
+        "reservePct": "0",
+        "reserveEnabled": false
+      },
+      "exact": {
+        "fee": "0",
+        "reserve": "0",
+        "beforeAd": "0",
+        "profit": "0",
+        "cashProfit": "0",
+        "monthly": "0",
+        "monthlyRevenue": "0.45",
+        "totalCost": "0.3"
+      },
+      "targetPrice": 1
+    },
+    {
+      "input": {
+        "sell": ".3",
+        "cost": ".2",
+        "ship": "0",
+        "ad": "0",
+        "fixed": "0",
+        "feePct": "1",
+        "units": ".125",
+        "targetPct": "25",
+        "reservePct": "0",
+        "reserveEnabled": false
+      },
+      "exact": {
+        "fee": "0.003",
+        "reserve": "0",
+        "beforeAd": "0.097",
+        "profit": "0.097",
+        "cashProfit": "0.097",
+        "monthly": "0.012125",
+        "monthlyRevenue": "0.0375",
+        "totalCost": "0.203"
+      },
+      "targetPrice": 1
+    },
+    {
+      "input": {
+        "sell": "1000000000000",
+        "cost": "0",
+        "ship": "0",
+        "ad": "0",
+        "fixed": "0",
+        "feePct": "0",
+        "units": "1000000000",
+        "targetPct": "25",
+        "reservePct": "0",
+        "reserveEnabled": false
+      },
+      "exact": {
+        "fee": "0",
+        "reserve": "0",
+        "beforeAd": "1000000000000",
+        "profit": "1000000000000",
+        "cashProfit": "1000000000000",
+        "monthly": "1000000000000000000000",
+        "monthlyRevenue": "1000000000000000000000",
+        "totalCost": "0"
+      },
+      "targetPrice": 1
+    },
+    {
+      "input": {
+        "sell": "1.000000000000000000000001",
+        "cost": "1",
+        "ship": "0",
+        "ad": "0",
+        "fixed": "0",
+        "feePct": "0",
+        "units": "0.000000000000000000000001",
+        "targetPct": "25",
+        "reservePct": "0",
+        "reserveEnabled": false
+      },
+      "exact": {
+        "fee": "0",
+        "reserve": "0",
+        "beforeAd": "0.000000000000000000000001",
+        "profit": "0.000000000000000000000001",
+        "cashProfit": "0.000000000000000000000001",
+        "monthly": "0.000000000000000000000000000000000000000000000001",
+        "monthlyRevenue": "0.000000000000000000000001000000000000000000000001",
+        "totalCost": "1"
+      },
+      "targetPrice": 2
+    },
+    {
+      "input": {
+        "sell": "29900",
+        "cost": "13200",
+        "ship": "3000",
+        "ad": "2500",
+        "fixed": "500",
+        "feePct": "0.12345678901234567890123456789",
+        "units": "200",
+        "targetPct": "25",
+        "reservePct": "3.3333333333333333333333333",
+        "reserveEnabled": true
+      },
+      "exact": {
+        "fee": "36.91357991469135799146913579911",
+        "reserve": "996.6666666666666666666666567",
+        "beforeAd": "12166.41975341864197534186420750089",
+        "profit": "9666.41975341864197534186420750089",
+        "cashProfit": "10663.08642008530864200853086420089",
+        "monthly": "1933283.950683728395068372841500178",
+        "monthlyRevenue": "5980000",
+        "totalCost": "20233.58024658135802465813579249911"
+      },
+      "targetPrice": 26837
+    },
+    {
+      "input": {
+        "sell": "50.09",
+        "cost": "39.63",
+        "ship": "61.54",
+        "ad": "11.92",
+        "fixed": "83.97",
+        "feePct": "4.1",
+        "units": "34.19",
+        "targetPct": "25.3",
+        "reservePct": "48.7",
+        "reserveEnabled": false
+      },
+      "exact": {
+        "fee": "2.05369",
+        "reserve": "0",
+        "beforeAd": "-137.10369",
+        "profit": "-149.02369",
+        "cashProfit": "-149.02369",
+        "monthly": "-5095.1199611",
+        "monthlyRevenue": "1712.5771",
+        "totalCost": "199.11369"
+      },
+      "targetPrice": 280
+    },
+    {
+      "input": {
+        "sell": "36.23",
+        "cost": "25.97",
+        "ship": "17.67",
+        "ad": "93.92",
+        "fixed": "96.14",
+        "feePct": "3.3",
+        "units": "44.32",
+        "targetPct": "23.4",
+        "reservePct": "8",
+        "reserveEnabled": true
+      },
+      "exact": {
+        "fee": "1.19559",
+        "reserve": "2.8984",
+        "beforeAd": "-107.64399",
+        "profit": "-201.56399",
+        "cashProfit": "-198.66559",
+        "monthly": "-8933.3160368",
+        "monthlyRevenue": "1605.7136",
+        "totalCost": "237.79399"
+      },
+      "targetPrice": 358
+    },
+    {
+      "input": {
+        "sell": "37.49",
+        "cost": "92.28",
+        "ship": "77.83",
+        "ad": "29.92",
+        "fixed": "61.93",
+        "feePct": "89.4",
+        "units": "58.92",
+        "targetPct": "82.2",
+        "reservePct": "62.8",
+        "reserveEnabled": false
+      },
+      "exact": {
+        "fee": "33.51606",
+        "reserve": "0",
+        "beforeAd": "-228.06606",
+        "profit": "-257.98606",
+        "cashProfit": "-257.98606",
+        "monthly": "-15200.5386552",
+        "monthlyRevenue": "2208.9108",
+        "totalCost": "295.47606"
+      },
+      "targetPrice": null
+    },
+    {
+      "input": {
+        "sell": "39.26",
+        "cost": "17.37",
+        "ship": "6.87",
+        "ad": "69.37",
+        "fixed": "26.1",
+        "feePct": "64.7",
+        "units": "67.98",
+        "targetPct": "50.1",
+        "reservePct": "99.6",
+        "reserveEnabled": true
+      },
+      "exact": {
+        "fee": "25.40122",
+        "reserve": "39.10296",
+        "beforeAd": "-75.58418",
+        "profit": "-144.95418",
+        "cashProfit": "-105.85122",
+        "monthly": "-9853.9851564",
+        "monthlyRevenue": "2668.8948",
+        "totalCost": "184.21418"
+      },
+      "targetPrice": null
+    },
+    {
+      "input": {
+        "sell": "87.96",
+        "cost": "54.32",
+        "ship": "74.54",
+        "ad": "59.57",
+        "fixed": "63.49",
+        "feePct": "38.2",
+        "units": "64.66",
+        "targetPct": "37.6",
+        "reservePct": "11.9",
+        "reserveEnabled": false
+      },
+      "exact": {
+        "fee": "33.60072",
+        "reserve": "0",
+        "beforeAd": "-137.99072",
+        "profit": "-197.56072",
+        "cashProfit": "-197.56072",
+        "monthly": "-12774.2761552",
+        "monthlyRevenue": "5687.4936",
+        "totalCost": "285.52072"
+      },
+      "targetPrice": 1041
+    },
+    {
+      "input": {
+        "sell": "90.05",
+        "cost": "41.24",
+        "ship": "30.41",
+        "ad": "7.14",
+        "fixed": "71.07",
+        "feePct": "7.7",
+        "units": "47.09",
+        "targetPct": "38.6",
+        "reservePct": "81.1",
+        "reserveEnabled": true
+      },
+      "exact": {
+        "fee": "6.93385",
+        "reserve": "73.03055",
+        "beforeAd": "-132.6344",
+        "profit": "-139.7744",
+        "cashProfit": "-66.74385",
+        "monthly": "-6581.976496",
+        "monthlyRevenue": "4240.4545",
+        "totalCost": "229.8244"
+      },
+      "targetPrice": null
+    },
+    {
+      "input": {
+        "sell": "18.96",
+        "cost": "39.12",
+        "ship": "31.99",
+        "ad": "21.06",
+        "fixed": "19.62",
+        "feePct": "56.5",
+        "units": "32.82",
+        "targetPct": "98",
+        "reservePct": "8.6",
+        "reserveEnabled": false
+      },
+      "exact": {
+        "fee": "10.7124",
+        "reserve": "0",
+        "beforeAd": "-82.4824",
+        "profit": "-103.5424",
+        "cashProfit": "-103.5424",
+        "monthly": "-3398.261568",
+        "monthlyRevenue": "622.2672",
+        "totalCost": "122.5024"
+      },
+      "targetPrice": null
+    },
+    {
+      "input": {
+        "sell": "27.47",
+        "cost": "84.05",
+        "ship": "40.29",
+        "ad": "14.65",
+        "fixed": "3.05",
+        "feePct": "25.4",
+        "units": "60.78",
+        "targetPct": "41.1",
+        "reservePct": "54.1",
+        "reserveEnabled": true
+      },
+      "exact": {
+        "fee": "6.97738",
+        "reserve": "14.86127",
+        "beforeAd": "-121.75865",
+        "profit": "-136.40865",
+        "cashProfit": "-121.54738",
+        "monthly": "-8290.917747",
+        "monthlyRevenue": "1669.6266",
+        "totalCost": "163.87865"
+      },
+      "targetPrice": null
+    },
+    {
+      "input": {
+        "sell": "90.62",
+        "cost": "36.55",
+        "ship": "14.33",
+        "ad": "53.93",
+        "fixed": "93.4",
+        "feePct": "55.2",
+        "units": "30.74",
+        "targetPct": "98.6",
+        "reservePct": "22.3",
+        "reserveEnabled": false
+      },
+      "exact": {
+        "fee": "50.02224",
+        "reserve": "0",
+        "beforeAd": "-103.68224",
+        "profit": "-157.61224",
+        "cashProfit": "-157.61224",
+        "monthly": "-4845.0002576",
+        "monthlyRevenue": "2785.6588",
+        "totalCost": "248.23224"
+      },
+      "targetPrice": null
+    },
+    {
+      "input": {
+        "sell": "74.98",
+        "cost": "72.04",
+        "ship": "91.39",
+        "ad": "21.71",
+        "fixed": "82.25",
+        "feePct": "82.9",
+        "units": "94.5",
+        "targetPct": "59.9",
+        "reservePct": "5.5",
+        "reserveEnabled": true
+      },
+      "exact": {
+        "fee": "62.15842",
+        "reserve": "4.1239",
+        "beforeAd": "-236.98232",
+        "profit": "-258.69232",
+        "cashProfit": "-254.56842",
+        "monthly": "-24446.42424",
+        "monthlyRevenue": "7085.61",
+        "totalCost": "333.67232"
+      },
+      "targetPrice": null
+    },
+    {
+      "input": {
+        "sell": "68.87",
+        "cost": "24.81",
+        "ship": "10.06",
+        "ad": "41.26",
+        "fixed": "5.75",
+        "feePct": "94",
+        "units": "9.29",
+        "targetPct": "72.4",
+        "reservePct": "93.8",
+        "reserveEnabled": false
+      },
+      "exact": {
+        "fee": "64.7378",
+        "reserve": "0",
+        "beforeAd": "-36.4878",
+        "profit": "-77.7478",
+        "cashProfit": "-77.7478",
+        "monthly": "-722.277062",
+        "monthlyRevenue": "639.8023",
+        "totalCost": "146.6178"
+      },
+      "targetPrice": null
+    },
+    {
+      "input": {
+        "sell": "16.24",
+        "cost": "0.31",
+        "ship": "10.78",
+        "ad": "46.55",
+        "fixed": "32.45",
+        "feePct": "38",
+        "units": "39.15",
+        "targetPct": "90.9",
+        "reservePct": "73.7",
+        "reserveEnabled": true
+      },
+      "exact": {
+        "fee": "6.1712",
+        "reserve": "11.96888",
+        "beforeAd": "-45.44008",
+        "profit": "-91.99008",
+        "cashProfit": "-80.0212",
+        "monthly": "-3601.411632",
+        "monthlyRevenue": "635.796",
+        "totalCost": "108.23008"
+      },
+      "targetPrice": null
+    },
+    {
+      "input": {
+        "sell": "86.49",
+        "cost": "58.86",
+        "ship": "47.47",
+        "ad": "32.78",
+        "fixed": "48.83",
+        "feePct": "23.7",
+        "units": "91.79",
+        "targetPct": "35",
+        "reservePct": "62.2",
+        "reserveEnabled": false
+      },
+      "exact": {
+        "fee": "20.49813",
+        "reserve": "0",
+        "beforeAd": "-89.16813",
+        "profit": "-121.94813",
+        "cashProfit": "-121.94813",
+        "monthly": "-11193.6188527",
+        "monthlyRevenue": "7938.9171",
+        "totalCost": "208.43813"
+      },
+      "targetPrice": 456
+    },
+    {
+      "input": {
+        "sell": "53.58",
+        "cost": "28.77",
+        "ship": "79.23",
+        "ad": "75.44",
+        "fixed": "85.9",
+        "feePct": "5.5",
+        "units": "8.39",
+        "targetPct": "1.5",
+        "reservePct": "29.6",
+        "reserveEnabled": true
+      },
+      "exact": {
+        "fee": "2.9469",
+        "reserve": "15.85968",
+        "beforeAd": "-159.12658",
+        "profit": "-234.56658",
+        "cashProfit": "-218.7069",
+        "monthly": "-1968.0136062",
+        "monthlyRevenue": "449.5362",
+        "totalCost": "288.14658"
+      },
+      "targetPrice": 425
+    },
+    {
+      "input": {
+        "sell": "89.5",
+        "cost": "80.81",
+        "ship": "90.56",
+        "ad": "92.62",
+        "fixed": "44.95",
+        "feePct": "6.7",
+        "units": "24.03",
+        "targetPct": "88.1",
+        "reservePct": "57.9",
+        "reserveEnabled": false
+      },
+      "exact": {
+        "fee": "5.9965",
+        "reserve": "0",
+        "beforeAd": "-132.8165",
+        "profit": "-225.4365",
+        "cashProfit": "-225.4365",
+        "monthly": "-5417.239095",
+        "monthlyRevenue": "2150.685",
+        "totalCost": "314.9365"
+      },
+      "targetPrice": 5942
+    },
+    {
+      "input": {
+        "sell": "38.35",
+        "cost": "90.2",
+        "ship": "99.55",
+        "ad": "48.65",
+        "fixed": "13.3",
+        "feePct": "77.8",
+        "units": "91.13",
+        "targetPct": "26.7",
+        "reservePct": "41.6",
+        "reserveEnabled": true
+      },
+      "exact": {
+        "fee": "29.8363",
+        "reserve": "15.9536",
+        "beforeAd": "-210.4899",
+        "profit": "-259.1399",
+        "cashProfit": "-243.1863",
+        "monthly": "-23615.419087",
+        "monthlyRevenue": "3494.8355",
+        "totalCost": "297.4899"
+      },
+      "targetPrice": null
+    },
+    {
+      "input": {
+        "sell": "46.06",
+        "cost": "75.03",
+        "ship": "34.95",
+        "ad": "11.04",
+        "fixed": "94.2",
+        "feePct": "63.3",
+        "units": "41.28",
+        "targetPct": "72.3",
+        "reservePct": "94.1",
+        "reserveEnabled": false
+      },
+      "exact": {
+        "fee": "29.15598",
+        "reserve": "0",
+        "beforeAd": "-187.27598",
+        "profit": "-198.31598",
+        "cashProfit": "-198.31598",
+        "monthly": "-8186.4836544",
+        "monthlyRevenue": "1901.3568",
+        "totalCost": "244.37598"
+      },
+      "targetPrice": null
+    },
+    {
+      "input": {
+        "sell": "99.7",
+        "cost": "35.59",
+        "ship": "65.43",
+        "ad": "26.77",
+        "fixed": "11.87",
+        "feePct": "84.4",
+        "units": "53.06",
+        "targetPct": "51",
+        "reservePct": "51.6",
+        "reserveEnabled": true
+      },
+      "exact": {
+        "fee": "84.1468",
+        "reserve": "51.4452",
+        "beforeAd": "-148.782",
+        "profit": "-175.552",
+        "cashProfit": "-124.1068",
+        "monthly": "-9314.78912",
+        "monthlyRevenue": "5290.082",
+        "totalCost": "275.252"
+      },
+      "targetPrice": null
+    },
+    {
+      "input": {
+        "sell": "43.54",
+        "cost": "13.32",
+        "ship": "48.44",
+        "ad": "68.86",
+        "fixed": "51.65",
+        "feePct": "85.5",
+        "units": "37.97",
+        "targetPct": "35.2",
+        "reservePct": "74.3",
+        "reserveEnabled": false
+      },
+      "exact": {
+        "fee": "37.2267",
+        "reserve": "0",
+        "beforeAd": "-107.0967",
+        "profit": "-175.9567",
+        "cashProfit": "-175.9567",
+        "monthly": "-6681.075899",
+        "monthlyRevenue": "1653.2138",
+        "totalCost": "219.4967"
+      },
+      "targetPrice": null
+    },
+    {
+      "input": {
+        "sell": "65.58",
+        "cost": "8.39",
+        "ship": "6.33",
+        "ad": "36.08",
+        "fixed": "89.69",
+        "feePct": "12.7",
+        "units": "40.2",
+        "targetPct": "33.9",
+        "reservePct": "24.5",
+        "reserveEnabled": true
+      },
+      "exact": {
+        "fee": "8.32866",
+        "reserve": "16.0671",
+        "beforeAd": "-63.22576",
+        "profit": "-99.30576",
+        "cashProfit": "-83.23866",
+        "monthly": "-3992.091552",
+        "monthlyRevenue": "2636.316",
+        "totalCost": "164.88576"
+      },
+      "targetPrice": 487
+    },
+    {
+      "input": {
+        "sell": "17.04",
+        "cost": "42.72",
+        "ship": "99.05",
+        "ad": "58.32",
+        "fixed": "1.88",
+        "feePct": "37.7",
+        "units": "83.93",
+        "targetPct": "93",
+        "reservePct": "71.8",
+        "reserveEnabled": false
+      },
+      "exact": {
+        "fee": "6.42408",
+        "reserve": "0",
+        "beforeAd": "-133.03408",
+        "profit": "-191.35408",
+        "cashProfit": "-191.35408",
+        "monthly": "-16060.3479344",
+        "monthlyRevenue": "1430.1672",
+        "totalCost": "208.39408"
+      },
+      "targetPrice": null
+    },
+    {
+      "input": {
+        "sell": "51.99",
+        "cost": "99.43",
+        "ship": "39.19",
+        "ad": "49.13",
+        "fixed": "13.18",
+        "feePct": "90",
+        "units": "25",
+        "targetPct": "84.7",
+        "reservePct": "14.6",
+        "reserveEnabled": true
+      },
+      "exact": {
+        "fee": "46.791",
+        "reserve": "7.59054",
+        "beforeAd": "-154.19154",
+        "profit": "-203.32154",
+        "cashProfit": "-195.731",
+        "monthly": "-5083.0385",
+        "monthlyRevenue": "1299.75",
+        "totalCost": "255.31154"
+      },
+      "targetPrice": null
+    },
+    {
+      "input": {
+        "sell": "6.8",
+        "cost": "90.54",
+        "ship": "40.6",
+        "ad": "32.77",
+        "fixed": "93.25",
+        "feePct": "91",
+        "units": "3.95",
+        "targetPct": "66",
+        "reservePct": "43",
+        "reserveEnabled": false
+      },
+      "exact": {
+        "fee": "6.188",
+        "reserve": "0",
+        "beforeAd": "-223.778",
+        "profit": "-256.548",
+        "cashProfit": "-256.548",
+        "monthly": "-1013.3646",
+        "monthlyRevenue": "26.86",
+        "totalCost": "263.348"
+      },
+      "targetPrice": null
+    },
+    {
+      "input": {
+        "sell": "91.2",
+        "cost": "1.56",
+        "ship": "42.24",
+        "ad": "47.32",
+        "fixed": "39.96",
+        "feePct": "54.5",
+        "units": "36.08",
+        "targetPct": "21",
+        "reservePct": "51.7",
+        "reserveEnabled": true
+      },
+      "exact": {
+        "fee": "49.704",
+        "reserve": "47.1504",
+        "beforeAd": "-89.4144",
+        "profit": "-136.7344",
+        "cashProfit": "-89.584",
+        "monthly": "-4933.377152",
+        "monthlyRevenue": "3290.496",
+        "totalCost": "227.9344"
+      },
+      "targetPrice": null
+    },
+    {
+      "input": {
+        "sell": "93.92",
+        "cost": "41.03",
+        "ship": "57.07",
+        "ad": "47.37",
+        "fixed": "79.52",
+        "feePct": "42.1",
+        "units": "90.31",
+        "targetPct": "23.9",
+        "reservePct": "28.6",
+        "reserveEnabled": false
+      },
+      "exact": {
+        "fee": "39.54032",
+        "reserve": "0",
+        "beforeAd": "-123.24032",
+        "profit": "-170.61032",
+        "cashProfit": "-170.61032",
+        "monthly": "-15407.8179992",
+        "monthlyRevenue": "8481.9152",
+        "totalCost": "264.53032"
+      },
+      "targetPrice": 662
+    },
+    {
+      "input": {
+        "sell": "75.15",
+        "cost": "42.25",
+        "ship": "37.33",
+        "ad": "63.58",
+        "fixed": "68.96",
+        "feePct": "95",
+        "units": "82.67",
+        "targetPct": "83",
+        "reservePct": "29.6",
+        "reserveEnabled": true
+      },
+      "exact": {
+        "fee": "71.3925",
+        "reserve": "22.2444",
+        "beforeAd": "-167.0269",
+        "profit": "-230.6069",
+        "cashProfit": "-208.3625",
+        "monthly": "-19064.272423",
+        "monthlyRevenue": "6212.6505",
+        "totalCost": "305.7569"
+      },
+      "targetPrice": null
+    },
+    {
+      "input": {
+        "sell": "91.36",
+        "cost": "22.54",
+        "ship": "47.58",
+        "ad": "76.8",
+        "fixed": "31.8",
+        "feePct": "24.4",
+        "units": "55.73",
+        "targetPct": "72.5",
+        "reservePct": "71.6",
+        "reserveEnabled": false
+      },
+      "exact": {
+        "fee": "22.29184",
+        "reserve": "0",
+        "beforeAd": "-32.85184",
+        "profit": "-109.65184",
+        "cashProfit": "-109.65184",
+        "monthly": "-6110.8970432",
+        "monthlyRevenue": "5091.4928",
+        "totalCost": "201.01184"
+      },
+      "targetPrice": 5766
+    },
+    {
+      "input": {
+        "sell": "48.22",
+        "cost": "75.09",
+        "ship": "43.59",
+        "ad": "18.03",
+        "fixed": "72.28",
+        "feePct": "59.9",
+        "units": "47.74",
+        "targetPct": "24.3",
+        "reservePct": "44.5",
+        "reserveEnabled": true
+      },
+      "exact": {
+        "fee": "28.88378",
+        "reserve": "21.4579",
+        "beforeAd": "-193.08168",
+        "profit": "-211.11168",
+        "cashProfit": "-189.65378",
+        "monthly": "-10078.4716032",
+        "monthlyRevenue": "2302.0228",
+        "totalCost": "259.33168"
+      },
+      "targetPrice": null
+    },
+    {
+      "input": {
+        "sell": "1.41",
+        "cost": "3.46",
+        "ship": "26.18",
+        "ad": "25.46",
+        "fixed": "56.37",
+        "feePct": "22.5",
+        "units": "82.42",
+        "targetPct": "4.7",
+        "reservePct": "14.9",
+        "reserveEnabled": false
+      },
+      "exact": {
+        "fee": "0.31725",
+        "reserve": "0",
+        "beforeAd": "-84.91725",
+        "profit": "-110.37725",
+        "cashProfit": "-110.37725",
+        "monthly": "-9097.292945",
+        "monthlyRevenue": "116.2122",
+        "totalCost": "111.78725"
+      },
+      "targetPrice": 154
+    },
+    {
+      "input": {
+        "sell": "73.52",
+        "cost": "64.44",
+        "ship": "48.37",
+        "ad": "53.62",
+        "fixed": "52.13",
+        "feePct": "36",
+        "units": "52.25",
+        "targetPct": "65.2",
+        "reservePct": "70.6",
+        "reserveEnabled": true
+      },
+      "exact": {
+        "fee": "26.4672",
+        "reserve": "51.90512",
+        "beforeAd": "-169.79232",
+        "profit": "-223.41232",
+        "cashProfit": "-171.5072",
+        "monthly": "-11673.29372",
+        "monthlyRevenue": "3841.42",
+        "totalCost": "296.93232"
+      },
+      "targetPrice": null
+    }
+  ],
+  "vat": [
+    {
+      "sales": "1",
+      "vatPct": "0",
+      "supply": "1",
+      "vat": "0"
+    },
+    {
+      "sales": "1",
+      "vatPct": "10",
+      "supply": "10/11",
+      "vat": "1/11"
+    },
+    {
+      "sales": ".1",
+      "vatPct": "0",
+      "supply": "1/10",
+      "vat": "0"
+    },
+    {
+      "sales": ".1",
+      "vatPct": "10",
+      "supply": "1/11",
+      "vat": "1/110"
+    },
+    {
+      "sales": "11000",
+      "vatPct": "0",
+      "supply": "11000",
+      "vat": "0"
+    },
+    {
+      "sales": "11000",
+      "vatPct": "10",
+      "supply": "10000",
+      "vat": "1000"
+    },
+    {
+      "sales": "0.12345678901234567890123456789",
+      "vatPct": "0",
+      "supply": "12345678901234567890123456789/100000000000000000000000000000",
+      "vat": "0"
+    },
+    {
+      "sales": "0.12345678901234567890123456789",
+      "vatPct": "10",
+      "supply": "12345678901234567890123456789/110000000000000000000000000000",
+      "vat": "12345678901234567890123456789/1100000000000000000000000000000"
+    },
+    {
+      "sales": "999999999999.999999999999",
+      "vatPct": "0",
+      "supply": "999999999999999999999999/1000000000000",
+      "vat": "0"
+    },
+    {
+      "sales": "999999999999.999999999999",
+      "vatPct": "10",
+      "supply": "90909090909090909090909/100000000000",
+      "vat": "90909090909090909090909/1000000000000"
+    }
+  ]
+}

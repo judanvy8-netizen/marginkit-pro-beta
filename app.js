@@ -1,5 +1,9 @@
 (() => {
 'use strict';
+if (!globalThis.MKDecimal) {
+  document.body.textContent = '정확한 소수 계산 모듈을 사용할 수 없습니다. BigInt를 지원하는 최신 브라우저에서 다시 열어 주세요.';
+  return;
+}
 
 const $ = (s, root=document) => root.querySelector(s);
 const $$ = (s, root=document) => [...root.querySelectorAll(s)];
@@ -11,28 +15,102 @@ const STORAGE_KEY_PRESET = 'marginkit_map_preset_v2';
 function loadCostsFromStorage() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY_COSTS);
-    if (saved) {
+    loadCostsFromStorage.revision = saved;
+    loadCostsFromStorage.initialized = true;
+    loadCostsFromStorage.blocked = false;
+    if (saved !== null) {
       const arr = JSON.parse(saved);
-      if (!Array.isArray(arr)) return new Map();
-      return new Map(arr.filter(entry => Array.isArray(entry) && entry.length === 2 &&
+      if (!Array.isArray(arr) || !arr.every(entry => Array.isArray(entry) && entry.length === 2 &&
         typeof entry[0] === 'string' && entry[1] && typeof entry[1].product === 'string' &&
-        typeof entry[1].sku === 'string' && Number.isFinite(entry[1].unitCost) && entry[1].unitCost >= 0 && entry[1].unitCost <= 1e12));
+        typeof entry[1].sku === 'string' && Number.isFinite(entry[1].unitCost) && entry[1].unitCost >= 0 && entry[1].unitCost <= 1e12 && validCostPrecision(entry[1])) ||
+        new Set(arr.map(entry => entry[0])).size !== arr.length ||
+        !withinDecimalBudget(arr.map(entry => entry[1]), ['unitCost', 'unitCostExact'])) {
+        throw new Error('Invalid saved cost register');
+      }
+      return new Map(arr);
     }
-  } catch(e) {
-    console.error('Failed to load costs from localStorage', e);
+  } catch (error) {
+    loadCostsFromStorage.blocked = true;
+    console.error('Failed to load costs from localStorage', error);
   }
   return new Map();
 }
 
-function saveCostsToStorage() {
-  // F01: demo mutations stay in-memory only and must not touch real persisted costs.
-  if (state.isDemo) return;
-  try {
-    const arr = [...state.costs.entries()];
-    localStorage.setItem(STORAGE_KEY_COSTS, JSON.stringify(arr));
-  } catch(e) {
-    console.error('Failed to save costs to localStorage', e);
+function checkCostStorageRevision(allowRecoveryReset = false) {
+  if (!loadCostsFromStorage.initialized || (loadCostsFromStorage.blocked && !allowRecoveryReset)) {
+    throw new Error('저장된 원가를 안전하게 읽지 못했습니다. 원본은 보존 중이며 덮어쓰기를 중지했습니다.');
   }
+  if (localStorage.getItem(STORAGE_KEY_COSTS) !== loadCostsFromStorage.revision) {
+    throw new Error('다른 탭에서 원가가 변경되었습니다. 현재 원본을 덮어쓰지 않습니다. 새로고침 후 다시 시도해 주세요.');
+  }
+}
+
+function saveCostsToStorage() {
+  return persistCosts(state.costs, state.isDemo);
+}
+
+function persistCosts(costs, isDemo) {
+  // Preserve legacy oversized registers; only explicit deletion-only reductions
+  // may remain above the restore limit. Never truncate or silently edit them.
+  if (costs.size > 20000 && !(costs.size < state.costs.size &&
+      [...costs].every(([key, value]) => state.costs.get(key) === value))) {
+    toast('등록 원가는 최대 20,000개입니다. 기존 원가는 유지됩니다. 초과한 기존 원가표는 먼저 JSON으로 백업한 뒤 불필요한 항목만 삭제해 주세요.');
+    return false;
+  }
+  if (!withinDecimalBudget([...costs.values()], ['unitCost', 'unitCostExact'])) {
+    toast('원가 숫자 데이터가 처리 한도를 초과했습니다. 원가표를 작게 나누어 주세요. 기존 원가는 유지됩니다.');
+    return false;
+  }
+  if (isDemo) return true;
+  try {
+    checkCostStorageRevision();
+    const serialized = JSON.stringify([...costs.entries()]);
+    localStorage.setItem(STORAGE_KEY_COSTS, serialized);
+    loadCostsFromStorage.revision = serialized;
+    return true;
+  } catch (error) {
+    console.error('Failed to save costs to localStorage', error);
+    toast('원가를 저장하지 못했습니다. 기존 원가는 유지됩니다. ' + (error.message || '저장 공간·브라우저 설정을 확인해 주세요.'));
+    return false;
+  }
+}
+
+function calculationWithinBudget(transactions, costs) {
+  const groups = new Map();
+  const bounds = value => {
+    const text = typeof value === 'number' ? MKDecimal.normalize(value) : String(value ?? '0');
+    const parts = text.replace(/^-/, '').split('.');
+    return { integer: parts[0].length, scale: (parts[1] || '').length };
+  };
+  for (const row of transactions) {
+    const key = row.sku ? `sku:${row.sku}` : `name:${norm(row.product)}`;
+    let group = groups.get(key);
+    if (!group) { group = { product: row.product, sku: row.sku, count: 0, integer: 1, scale: 0 }; groups.set(key, group); }
+    group.count++;
+    for (const field of ['qty', 'revenue', 'commission', 'shipping', 'ads', 'refunds', 'other']) {
+      const size = bounds(row.exact?.[field] ?? row[field] ?? '0');
+      group.integer = Math.max(group.integer, size.integer);
+      group.scale = Math.max(group.scale, size.scale);
+    }
+  }
+  let projected = 0;
+  for (const group of groups.values()) {
+    const cost = (group.sku ? costs.get(`sku:${group.sku}`) : null) || costs.get(`name:${norm(group.product)}`);
+    const rawLength = group.integer + group.scale + 2 + String(group.count).length - 1;
+    const costSize = cost ? bounds(cost.unitCostExact ?? cost.unitCost) : { integer: 1, scale: 0 };
+    const derivedLength = Math.max(rawLength, rawLength + costSize.integer + costSize.scale + 2);
+    // Bound expanded per-product amounts, not merely the source file size.
+    projected += 8 * rawLength + 4 * derivedLength + 50;
+    if (projected > 8000000) return false;
+  }
+  return true;
+}
+
+function commitCosts(nextCosts) {
+  if (!calculationWithinBudget(state.transactions || [], nextCosts)) { toast('계산 결과의 숫자 데이터가 처리 한도를 초과합니다. 분석 파일을 작게 나누어 주세요. 기존 원가는 유지됩니다.'); return false; }
+  if (!persistCosts(nextCosts, state.isDemo)) return false;
+  state.costs = nextCosts;
+  return true;
 }
 
 function restoreCostsFromStorage() {
@@ -201,7 +279,7 @@ const costFieldDefs = [
 
 // --- Utilities ---
 const fmt = (n, decimals=0) => Number.isFinite(Number(n)) ? new Intl.NumberFormat('ko-KR', { maximumFractionDigits: decimals, minimumFractionDigits: decimals }).format(Number(n)) : '—';
-const won = n => Number.isFinite(Number(n)) ? '₩' + fmt(Math.round(Number(n))) : '—';
+const won = n => { try { return n === null || n === undefined ? '—' : '₩' + MKDecimal.format(n); } catch { return '—'; } };
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 function compactWon(n) {
   n = Number(n) || 0;
@@ -232,18 +310,39 @@ function showModal(title, body) {
 }
 
 function parseNum(v) {
-  if (v === null || v === undefined || v === '') return null;
-  if (typeof v === 'number') return Number.isFinite(v) && Math.abs(v) <= 1e12 ? v : null;
-  let s = String(v).trim();
-  if (!s || s === '-' || s === '—') return null;
-  const accounting = /^\(.*\)$/.test(s);
-  if (accounting) s = s.slice(1, -1);
-  s = s.replace(/[₩원$%\s]/g, '');
-  if (s.includes(',') && !/^[+-]?\d{1,3}(,\d{3})*(\.\d+)?$/.test(s)) return null;
-  s = s.replace(/,/g, '');
-  if (!/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(s)) return null;
-  const n = Number(s);
-  return Number.isFinite(n) && Math.abs(n) <= 1e12 ? (accounting ? -Math.abs(n) : n) : null;
+  const exact = MKDecimal.input(v);
+  return exact === null ? null : Number(exact);
+}
+
+// Bound synchronous decimal work without rounding normal decimal inputs.
+function withinDecimalBudget(rows, columns) {
+  let size = 0;
+  for (const row of rows) {
+    for (const column of columns) {
+      const value = row[column];
+      size += String(value ?? '').length;
+      if (typeof value === 'number' && Number.isFinite(value) && value !== 0 && Math.abs(value) < 1) {
+        size += Math.max(0, -Math.floor(Math.log10(Math.abs(value))));
+      }
+      if (size > 3000000) return false;
+    }
+  }
+  return true;
+}
+
+function makeCostRecord(product, sku, raw) {
+  const exact = MKDecimal.input(raw);
+  if (exact === null || MKDecimal.compare(exact, '0') < 0) return null;
+  const unitCost = Number(exact);
+  const record = { product, sku, unitCost };
+  if (MKDecimal.normalize(unitCost) !== exact) record.unitCostExact = exact;
+  return record;
+}
+
+function validCostPrecision(record) {
+  if (!Object.prototype.hasOwnProperty.call(record, 'unitCostExact')) return true;
+  return typeof record.unitCostExact === 'string' && MKDecimal.input(record.unitCostExact) === record.unitCostExact &&
+    MKDecimal.compare(record.unitCostExact, '0') >= 0 && Number(record.unitCostExact) === record.unitCost;
 }
 
 function norm(s) {
@@ -350,6 +449,9 @@ function ingestSalesRows(rows, map) {
     return { ok: false, error: '상품명과 상품 매출 열은 필수입니다.' };
   }
 
+  if (!withinDecimalBudget(rows, ['qty', 'revenue', 'commission', 'shipping', 'ads', 'refunds', 'other'].map(key => map[key]).filter(Boolean))) {
+    return { ok: false, error: '숫자 데이터가 처리 한도를 초과했습니다. 파일을 작게 나누어 주세요.' };
+  }
   const parsed = [];
   let skipped = 0;
   let rowNumber = 1;
@@ -374,6 +476,11 @@ function ingestSalesRows(rows, map) {
       }
     }
     const qty = get('qty');
+    const exact = {};
+    for (const key of ['qty', 'revenue', 'commission', 'shipping', 'ads', 'refunds', 'other']) {
+      const value = map[key] ? MKDecimal.input(row[map[key]]) : null;
+      exact[key] = value === null ? (key === 'qty' ? '1' : '0') : (['qty', 'revenue'].includes(key) ? value : MKDecimal.abs(value));
+    }
 
     parsed.push({
       product,
@@ -385,6 +492,7 @@ function ingestSalesRows(rows, map) {
       ads: Math.abs(get('ads') ?? 0),
       refunds: Math.abs(get('refunds') ?? 0),
       other: Math.abs(get('other') ?? 0),
+      exact,
       source: row
     });
   }
@@ -401,6 +509,7 @@ function ingestCostRows(rows, map, baseCosts = state.costs) {
     return { ok: false, error: '원가 파일에서 상품명과 단위당 매입 원가 열을 지정해 주세요.' };
   }
 
+  if (!withinDecimalBudget(rows, [map.unitCost])) return { ok: false, added: 0, error: '원가 숫자 데이터가 처리 한도를 초과했습니다. 파일을 작게 나누어 주세요.' };
   const costs = new Map(baseCosts);
   let added = 0;
   for (const row of rows) {
@@ -408,10 +517,10 @@ function ingestCostRows(rows, map, baseCosts = state.costs) {
     const sku = map.sku ? String(row[map.sku] ?? '').trim() : '';
     const unitCost = parseNum(row[map.unitCost]);
 
-    if (!product || unitCost === null || unitCost < 0) continue;
+    if (!product || unitCost === null || MKDecimal.compare(MKDecimal.input(row[map.unitCost]), '0') < 0) continue;
 
     const key = sku ? `sku:${sku}` : `name:${norm(product)}`;
-    costs.set(key, { product, sku, unitCost });
+    costs.set(key, makeCostRecord(product, sku, row[map.unitCost]));
     added++;
   }
 
@@ -427,58 +536,30 @@ function getCost(p) {
 
 function aggregate() {
   const map = new Map();
-
+  const fields = ['qty', 'revenue', 'commission', 'shipping', 'ads', 'refunds', 'other'];
   for (const t of state.transactions) {
     const key = t.sku ? `sku:${t.sku}` : `name:${norm(t.product)}`;
     if (!map.has(key)) {
-      map.set(key, {
-        key,
-        product: t.product,
-        sku: t.sku,
-        qty: 0,
-        revenue: 0,
-        commission: 0,
-        shipping: 0,
-        ads: 0,
-        refunds: 0,
-        other: 0,
-        rows: 0
-      });
+      const product = { key, product: t.product, sku: t.sku, rows: 0 };
+      for (const field of fields) product[field] = '0';
+      map.set(key, product);
     }
-    const p = map.get(key);
-    p.qty += t.qty;
-    p.revenue += t.revenue;
-    p.commission += t.commission;
-    p.shipping += t.shipping;
-    p.ads += t.ads;
-    p.refunds += t.refunds;
-    p.other += t.other;
-    p.rows++;
+    const product = map.get(key);
+    for (const field of fields) product[field] = MKDecimal.add(product[field], t.exact?.[field] ?? t[field]);
+    product.rows++;
   }
-
   state.products = [...map.values()].map(p => {
     const c = getCost(p);
-    const netRevenue = p.revenue - p.refunds;
-    const fees = p.commission + p.shipping + p.ads + p.other;
-    const cost = c ? c.unitCost * p.qty : null;
-    const profit = cost === null ? null : netRevenue - fees - cost;
-    const margin = (profit !== null && netRevenue > 0) ? (profit / netRevenue) * 100 : null;
-    const totalCostAndFee = (cost ?? 0) + fees;
-    const roi = (profit !== null && totalCostAndFee > 0) ? (profit / totalCostAndFee) * 100 : null;
-
-    return {
-      ...p,
-      netRevenue,
-      fees,
-      cost,
-      unitCost: c ? c.unitCost : null,
-      profit,
-      margin,
-      roi,
-      hasCost: !!c
-    };
+    const netRevenue = MKDecimal.sub(p.revenue, p.refunds);
+    const fees = ['commission', 'shipping', 'ads', 'other'].reduce((sum, field) => MKDecimal.add(sum, p[field]), '0');
+    const unitCost = c ? MKDecimal.normalize(c.unitCostExact ?? c.unitCost) : null;
+    const cost = c ? MKDecimal.mul(unitCost, p.qty) : null;
+    const profit = cost === null ? null : MKDecimal.sub(MKDecimal.sub(netRevenue, fees), cost);
+    const margin = profit !== null && MKDecimal.compare(netRevenue, '0') > 0 ? MKDecimal.percentage(profit, netRevenue) : null;
+    const totalCostAndFee = MKDecimal.add(cost ?? '0', fees);
+    const roi = profit !== null && MKDecimal.compare(totalCostAndFee, '0') > 0 ? MKDecimal.percentage(profit, totalCostAndFee) : null;
+    return { ...p, netRevenue, fees, cost, unitCost, profit, margin, roi, hasCost: !!c };
   });
-
   return sortProducts(state.products);
 }
 
@@ -493,44 +574,45 @@ function sortProducts(products) {
     if (va === null || va === undefined) return 1;
     if (vb === null || vb === undefined) return -1;
 
-    if (typeof va === 'string') return va.localeCompare(vb, 'ko') * asc;
-    return (va - vb) * asc;
+    if (['product', 'sku', 'key'].includes(col)) return String(va).localeCompare(String(vb), 'ko') * asc;
+    return MKDecimal.compare(va, vb) * asc;
   });
 }
 
 function totalUp() {
   const products = aggregate();
-  const totalRevenue = products.reduce((s, p) => s + p.revenue, 0);
-  const totalRefunds = products.reduce((s, p) => s + p.refunds, 0);
+  const sum = (list, field) => list.reduce((value, p) => MKDecimal.add(value, p[field] ?? '0'), '0');
+  const totalRevenue = sum(products, 'revenue');
+  const totalRefunds = sum(products, 'refunds');
   const known = products.filter(p => p.hasCost);
-  const profit = known.reduce((s, p) => s + (p.profit ?? 0), 0);
-  const knownRevenue = known.reduce((s, p) => s + p.netRevenue, 0);
-  const missing = products.filter(p => !p.hasCost).length;
-  const qty = products.reduce((s, p) => s + p.qty, 0);
-
-  return {
-    products,
-    totalRevenue,
-    totalRefunds,
-    profit,
-    margin: knownRevenue > 0 ? (profit / knownRevenue) * 100 : null,
-    missing,
-    knownCount: known.length,
-    qty,
-    knownRevenue
-  };
+  const profit = sum(known, 'profit');
+  const knownRevenue = sum(known, 'netRevenue');
+  return { products, totalRevenue, totalRefunds, profit,
+    margin: MKDecimal.compare(knownRevenue, '0') > 0 ? MKDecimal.percentage(profit, knownRevenue) : null,
+    missing: products.filter(p => !p.hasCost).length, knownCount: known.length,
+    qty: sum(products, 'qty'), knownRevenue };
 }
 
 function setCost(p, unitCost) {
   const n = parseNum(unitCost);
-  if (n === null || n < 0) {
+  if (n === null || MKDecimal.compare(MKDecimal.input(unitCost), '0') < 0) {
     toast('원가는 0 이상의 숫자로 입력해 주세요.');
     return false;
   }
   const key = p.sku ? `sku:${p.sku}` : `name:${norm(p.product)}`;
-  state.costs.set(key, { product: p.product, sku: p.sku || '', unitCost: n });
-  saveCostsToStorage();
-  return true;
+  const nextCosts = new Map(state.costs);
+  nextCosts.set(key, makeCostRecord(p.product, p.sku || '', unitCost));
+  return commitCosts(nextCosts);
+}
+
+function removeRegisteredCost(key) {
+  if (!state.costs.has(key)) {
+    toast('이 행은 공통 상품명 원가를 사용합니다. 삭제할 개별 원가는 없습니다. 상품명 기준 원가 행에서 직접 관리해 주세요.');
+    return false;
+  }
+  const nextCosts = new Map(state.costs);
+  nextCosts.delete(key);
+  return commitCosts(nextCosts);
 }
 
 // --- Dashboard Rendering ---
@@ -538,10 +620,10 @@ function renderDashboard() {
   const t = totalUp();
 
   $('#kpiRevenue').textContent = t.products.length ? won(t.totalRevenue) : '—';
-  $('#kpiRevenueFoot').textContent = t.products.length ? `${fmt(t.products.length)}개 품목 · ${fmt(t.qty)}개 수량` : '분석 데이터 없음';
+  $('#kpiRevenueFoot').textContent = t.products.length ? `${fmt(t.products.length)}개 품목 · ${MKDecimal.format(t.qty)}개 수량` : '분석 데이터 없음';
 
   $('#kpiProfit').textContent = t.knownCount ? won(t.profit) : '—';
-  $('#kpiProfit').className = 'kpi-val ' + (t.knownCount ? (t.profit < 0 ? 'negative' : 'positive') : '');
+  $('#kpiProfit').className = 'kpi-val ' + (t.knownCount ? (MKDecimal.compare(t.profit, '0') < 0 ? 'negative' : 'positive') : '');
   $('#kpiProfitFoot').textContent = t.knownCount ? `원가 등록 ${fmt(t.knownCount)}개 상품 합산` : '원가가 등록된 상품만 계산';
 
   $('#kpiMargin').textContent = t.margin === null ? '—' : `${fmt(t.margin, 1)}%`;
@@ -569,9 +651,9 @@ function renderSalesChart(products) {
 
   let rows = [...products];
   if (metric === 'revenue') {
-    rows = rows.sort((a, b) => b.revenue - a.revenue).slice(0, 6);
+    rows = rows.sort((a, b) => MKDecimal.compare(b.revenue, a.revenue)).slice(0, 6);
   } else {
-    rows = rows.filter(p => p.hasCost && p.profit !== null).sort((a, b) => (b.profit ?? 0) - (a.profit ?? 0)).slice(0, 6);
+    rows = rows.filter(p => p.hasCost && p.profit !== null).sort((a, b) => MKDecimal.compare(b.profit ?? '0', a.profit ?? '0')).slice(0, 6);
   }
 
   if (!rows.length) {
@@ -586,7 +668,7 @@ function renderSalesChart(products) {
       ${rows.map(p => {
         const val = metric === 'revenue' ? p.revenue : (p.profit ?? 0);
         const h = Math.max(6, Math.abs(val) / max * 100);
-        const isLoss = val < 0;
+        const isLoss = MKDecimal.compare(val, '0') < 0;
         return `
           <div class="bar-col">
             <div class="bar-value ${isLoss ? 'negative' : ''}">${esc(compactWon(val))}</div>
@@ -600,7 +682,7 @@ function renderSalesChart(products) {
     </div>
     <div class="tiny muted" style="margin-top:12px; display:flex; justify-content:space-between">
       <span>${metric === 'revenue' ? '매출액 기준 (VAT/환불 포함)' : '원가 및 수수료 차감 후 추정 이익'}</span>
-      <span style="color:var(--primary); font-weight:700">실시간 반영됨</span>
+      <span style="color:var(--primary); font-weight:700">축·축약 금액은 표시용 근사값</span>
     </div>
   `;
 }
@@ -625,18 +707,18 @@ function renderInsights(t) {
     arr.push(['!', '원가 미등록 상품 확인', `${t.missing}개 품목의 원가가 누락되어 이익 집계에서 제외되었습니다. 원가를 입력해야 전체 순이익이 정확해집니다.`, 'amber']);
   }
 
-  const lossProds = t.products.filter(p => p.hasCost && p.profit < 0);
+  const lossProds = t.products.filter(p => p.hasCost && MKDecimal.compare(p.profit, '0') < 0);
   if (lossProds.length > 0) {
-    const totalLoss = lossProds.reduce((s, p) => s + Math.abs(p.profit), 0);
+    const totalLoss = lossProds.reduce((s, p) => MKDecimal.add(s, MKDecimal.abs(p.profit)), '0');
     arr.push(['↘', '적자(손실) 판매 품목 주의', `${lossProds.length}개 상품에서 총 ${won(totalLoss)}의 손실이 추정됩니다. 광고비나 과도한 수수료, 매입원가를 재점검하세요.`, 'red']);
   }
 
-  const bestProfit = [...t.products].filter(p => p.hasCost && p.profit > 0).sort((a, b) => b.profit - a.profit)[0];
+  const bestProfit = [...t.products].filter(p => p.hasCost && MKDecimal.compare(p.profit, '0') > 0).sort((a, b) => MKDecimal.compare(b.profit, a.profit))[0];
   if (bestProfit) {
     arr.push(['★', '최대 이익 기여 효자 상품', `[${shorten(bestProfit.product, 12)}]에서 추정 이익 ${won(bestProfit.profit)} (마진율 ${fmt(bestProfit.margin, 1)}%)을 기록했습니다.`, 'green']);
   }
 
-  const refundHeavy = t.products.filter(p => p.refunds > 0 && p.revenue > 0 && (p.refunds / p.revenue) > 0.1);
+  const refundHeavy = t.products.filter(p => MKDecimal.compare(p.refunds, '0') > 0 && MKDecimal.compare(p.revenue, '0') > 0 && MKDecimal.compare(p.refunds, MKDecimal.mul(p.revenue, '0.1')) > 0);
   if (refundHeavy.length > 0) {
     arr.push(['⟲', '반품·환불 비율 주의 품목', `${refundHeavy.length}개 품목에서 매출의 10%를 초과하는 환불/취소가 감지되었습니다. 품질 및 배송 이슈를 점검하세요.`, 'amber']);
   }
@@ -698,18 +780,18 @@ function renderTableHtml(products, preview = false) {
                 ${p.sku ? `<span class="product-code">${esc(p.sku)}</span>` : ''}
               </td>
               <td class="num money">${won(p.revenue)}</td>
-              <td class="num money">${fmt(p.qty)}</td>
+              <td class="num money">${MKDecimal.format(p.qty)}</td>
               <td class="num money">${p.cost === null ? '<span class="muted">미등록</span>' : won(p.cost)}</td>
-              <td class="num money">${won(p.fees + p.refunds)}</td>
-              <td class="num money ${p.profit === null ? '' : (p.profit < 0 ? 'negative' : 'positive')}">
+              <td class="num money">${won(MKDecimal.add(p.fees, p.refunds))}</td>
+              <td class="num money ${p.profit === null ? '' : (MKDecimal.compare(p.profit, '0') < 0 ? 'negative' : 'positive')}">
                 ${p.profit === null ? '—' : won(p.profit)}
               </td>
-              <td class="num font-bold ${p.margin === null ? '' : (p.margin < 0 ? 'negative' : 'positive')}">
+              <td class="num font-bold ${p.margin === null ? '' : (MKDecimal.compare(p.profit, '0') < 0 ? 'negative' : 'positive')}">
                 ${p.margin === null ? '—' : `${fmt(p.margin, 1)}%`}
               </td>
               <td>
                 ${p.hasCost
-                  ? (p.profit < 0 ? '<span class="status-chip chip-red">손실 (적자)</span>' : '<span class="status-chip chip-green">정상 마진</span>')
+                  ? (MKDecimal.compare(p.profit, '0') < 0 ? '<span class="status-chip chip-red">손실 (적자)</span>' : '<span class="status-chip chip-green">정상 마진</span>')
                   : '<span class="status-chip chip-amber">원가 입력필요</span>'
                 }
               </td>
@@ -759,6 +841,9 @@ function renderDashTable(products) {
 function renderProducts() {
   const t = totalUp();
   const search = norm($('#productSearch').value || '');
+  $('#costCountWarning').classList.toggle('hidden', state.costs.size <= 20000);
+  $('#costStorageWarning').classList.toggle('hidden', !loadCostsFromStorage.blocked);
+  $('#btnExportStoredCostRaw').disabled = typeof loadCostsFromStorage.revision !== 'string';
 
   const allProductKeys = new Set();
   const combinedList = [];
@@ -785,7 +870,7 @@ function renderProducts() {
         product: c.product,
         sku: c.sku,
         qty: 0,
-        unitCost: c.unitCost,
+        unitCost: c.unitCostExact ?? c.unitCost,
         cost: 0,
         hasCost: true,
         isFromSales: false
@@ -833,10 +918,11 @@ function renderProducts() {
               <td>
                 <span class="product-name" title="${esc(p.product)}">${esc(p.product)}</span>
                 ${p.sku ? `<span class="product-code">${esc(p.sku)}</span>` : ''}
+                ${p.hasCost && !state.costs.has(p.key) ? '<span class="tiny muted">공통 상품명 원가 적용 · 수정 시 개별 SKU 원가 등록</span>' : !p.sku ? '<span class="tiny muted">상품명 기준 원가 · 같은 상품명의 SKU에도 적용될 수 있음</span>' : ''}
               </td>
-              <td class="num">${p.isFromSales ? fmt(p.qty) : '<span class="muted">— (정산 없음)</span>'}</td>
+              <td class="num">${p.isFromSales ? MKDecimal.format(p.qty) : '<span class="muted">— (정산 없음)</span>'}</td>
               <td>
-                <input class="cost-input" type="number" min="0" step="10"
+                <input class="cost-input" type="number" min="0" step="any"
                        data-cost-key="${esc(p.key)}"
                        value="${p.unitCost === null ? '' : p.unitCost}"
                        placeholder="원가 입력" />
@@ -849,7 +935,7 @@ function renderProducts() {
                 }
               </td>
               <td style="text-align:center">
-                ${p.hasCost ? `<button class="btn-icon" data-delete-cost="${esc(p.key)}" title="원가 삭제">🗑️</button>` : ''}
+                ${p.hasCost && state.costs.has(p.key) ? `<button class="btn-icon" data-delete-cost="${esc(p.key)}" title="등록 원가 삭제">🗑️</button>` : p.hasCost ? '<span class="tiny muted">공통 원가</span>' : ''}
               </td>
             </tr>
           `).join('')}
@@ -869,28 +955,30 @@ function renderProducts() {
       if (!item) return;
 
       const v = input.value.trim();
+      let message = '상품 원가를 업데이트했습니다.';
       if (!v) {
-        state.costs.delete(key);
-        saveCostsToStorage();
+        if (!removeRegisteredCost(key)) { renderProducts(); return; }
+        message = item.sku && state.costs.has(`name:${norm(item.product)}`) ? '개별 SKU 원가를 삭제했습니다. 공통 상품명 원가가 다시 적용됩니다.' : '등록된 원가를 삭제했습니다.';
       } else {
-        setCost(item, v);
+        if (!setCost(item, v)) { renderProducts(); return; }
       }
       renderProducts();
       renderDashboard();
       renderResults();
-      toast('상품 원가를 업데이트했습니다.');
+      toast(message);
     });
   });
 
   $$('[data-delete-cost]', container).forEach(btn => {
     btn.addEventListener('click', () => {
       const key = btn.dataset.deleteCost;
-      state.costs.delete(key);
-      saveCostsToStorage();
+      const item = combinedList.find(x => x.key === key);
+      if (!removeRegisteredCost(key)) return;
+      const message = item?.sku && state.costs.has(`name:${norm(item.product)}`) ? '개별 SKU 원가를 삭제했습니다. 공통 상품명 원가가 다시 적용됩니다.' : '등록된 원가를 삭제했습니다.';
       renderProducts();
       renderDashboard();
       renderResults();
-      toast('등록된 원가를 삭제했습니다.');
+      toast(message);
     });
   });
 }
@@ -904,8 +992,8 @@ function renderResults() {
     !search || norm(p.product).includes(search) || norm(p.sku).includes(search)
   );
 
-  if (state.filter === 'profit') products = products.filter(p => p.hasCost && p.profit >= 0);
-  if (state.filter === 'loss') products = products.filter(p => p.hasCost && p.profit < 0);
+  if (state.filter === 'profit') products = products.filter(p => p.hasCost && MKDecimal.compare(p.profit, '0') >= 0);
+  if (state.filter === 'loss') products = products.filter(p => p.hasCost && MKDecimal.compare(p.profit, '0') < 0);
   if (state.filter === 'missing') products = products.filter(p => !p.hasCost);
 
   $('#resultSub').textContent = state.isDemo
@@ -1234,12 +1322,14 @@ function processImport() {
     nextCosts = c.costs;
   }
 
+  if (!calculationWithinBudget(m.rows, nextCosts)) { toast('계산 결과의 숫자 데이터가 처리 한도를 초과합니다. 분석 파일을 작게 나누어 주세요.'); return; }
+  // Persist candidate costs before publishing any imported state.
+  if (costImport?.added > 0 && !persistCosts(nextCosts, false)) return;
   // Commit only after all selected inputs have parsed and validated.
   invalidateImportReads();
   state.transactions = m.rows;
   state.costs = nextCosts;
   state.isDemo = false;
-  if (costImport?.added > 0) saveCostsToStorage();
   saveMappingPreset(state.salesMap);
 
   $('#step1').classList.add('done');
@@ -1262,11 +1352,11 @@ function processImport() {
 
 // --- Demo Data ---
 function loadDemo() {
-  invalidateImportReads();
   // Flush real costs first, then switch to an in-memory demo map.
   if (!state.isDemo) {
-    saveCostsToStorage();
+    if (!saveCostsToStorage()) return;
   }
+  invalidateImportReads();
   state.isDemo = true;
   state.salesWorkbook = null;
   state.costWorkbook = null;
@@ -1334,6 +1424,13 @@ function csvCell(v) {
   return s;
 }
 
+function csvDecimalCell(value) {
+  if (value === '' || value === null || value === undefined) return '';
+  // Ratio display can use scientific notation at large magnitudes; only numeric
+  // primitives are expanded here. Arbitrary string exponents remain rejected.
+  return MKDecimal.normalize(value);
+}
+
 function downloadBlob(content, name, type = 'text/csv;charset=utf-8;') {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -1374,9 +1471,44 @@ function exportCurrentProductsCostTemplate() {
   }
   const headers = ['상품명', '상품코드', '단위당 매입 원가'];
   const rows = t.products.map(p => [p.product, p.sku, p.unitCost ?? '']);
-  const csv = '\ufeff' + [headers, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
+  const csv = '\ufeff' + [headers.map(csvCell).join(','), ...rows.map(r => r.map((value, i) => i < 2 || i === 16 ? csvCell(value) : csvDecimalCell(value)).join(','))].join('\r\n');
   downloadBlob(csv, `marginkit-products-costs-${new Date().toISOString().slice(0, 10)}.csv`);
   toast('현재 분석된 상품 목록이 채워진 원가표를 다운로드했습니다.');
+}
+
+// Export the complete active cost register, independent of sales and view filters.
+// Demo mode exports only its isolated in-memory data, never real stored costs.
+function exportRegisteredCosts() {
+  if (!state.costs.size) {
+    toast('내보낼 등록 원가가 없습니다.');
+    return;
+  }
+  const headers = ['상품명', '상품코드', '단위당 매입 원가'];
+  const rows = [...state.costs.values()].map(c => [c.product, c.sku, c.unitCostExact ?? c.unitCost]);
+  const csv = '\ufeff' + [headers.map(csvCell).join(','), ...rows.map(r => r.map((value, i) => i < 2 || i === 16 ? csvCell(value) : csvDecimalCell(value)).join(','))].join('\r\n');
+  const prefix = state.isDemo ? 'marginkit-demo-costs' : 'marginkit-registered-costs';
+  downloadBlob(csv, `${prefix}-${new Date().toISOString().slice(0, 10)}.csv`);
+  toast(`${state.isDemo ? '데모' : '등록'} 원가 전체 ${rows.length}개를 내보냈습니다. 현재 분석에 없는 상품도 포함됩니다.`);
+}
+
+// Versioned lossless cost-register snapshot.
+function exportCostRegisterJson() {
+  if (!state.costs.size) {
+    toast('백업할 등록 원가가 없습니다.');
+    return;
+  }
+  const snapshot = {
+    format: 'marginkit-cost-register',
+    version: [...state.costs.values()].some(c => Object.prototype.hasOwnProperty.call(c, 'unitCostExact')) ? 2 : 1,
+    mode: state.isDemo ? 'demo' : 'real',
+    exportedAt: new Date().toISOString(),
+    costs: [...state.costs.entries()]
+  };
+  const prefix = state.isDemo ? 'marginkit-demo-cost-register' : 'marginkit-cost-register';
+  downloadBlob(JSON.stringify(snapshot, null, 2), `${prefix}-${snapshot.exportedAt.slice(0, 10)}.json`, 'application/json;charset=utf-8');
+  toast(snapshot.costs.length > 20000
+    ? `원가 ${snapshot.costs.length}개를 손실 없이 백업했습니다. 이 파일은 20,000개 복원 한도를 초과합니다. 별도 분할 검토가 필요하며 원본을 보관해 주세요.`
+    : `원가 ${snapshot.costs.length}개의 JSON 백업을 받았습니다. JSON 복원에서 검토 후 새 상품만 추가할 수 있습니다.`);
 }
 
 function downloadResults() {
@@ -1403,15 +1535,122 @@ function downloadResults() {
     p.shipping,
     p.ads,
     p.other,
-    p.fees + (p.cost ?? 0),
+    MKDecimal.add(p.fees, p.cost ?? '0'),
     p.profit ?? '',
-    p.margin !== null ? p.margin.toFixed(1) : '',
-    p.roi !== null ? p.roi.toFixed(1) : '',
+    p.margin !== null ? Number(p.margin.toFixed(1)) : '',
+    p.roi !== null ? Number(p.roi.toFixed(1)) : '',
     p.hasCost ? '등록됨' : '미등록'
   ]);
-  const csv = '\ufeff' + [headers, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
+  const csv = '\ufeff' + [headers.map(csvCell).join(','), ...rows.map(r => r.map((value, i) => i < 2 || i === 16 ? csvCell(value) : csvDecimalCell(value)).join(','))].join('\r\n');
   downloadBlob(csv, `marginkit-report-${new Date().toISOString().slice(0, 10)}.csv`);
   toast('분석 리포트 CSV를 다운로드했습니다.');
+}
+
+// --- Validated, non-destructive JSON cost restoration ---
+let costRestoreGeneration = 0;
+let pendingCostRestore = null;
+
+function validateCostSnapshot(text) {
+  if (new TextEncoder().encode(text).byteLength > 10 * 1024 * 1024) throw new Error('JSON 백업은 10MB 이하만 지원합니다.');
+  let data;
+  try { data = JSON.parse(text.replace(/^\ufeff/, '')); } catch { throw new Error('올바른 JSON 파일이 아닙니다.'); }
+  const exact = (value, keys) => value && typeof value === 'object' && !Array.isArray(value) &&
+    Object.keys(value).length === keys.length && keys.every(key => Object.prototype.hasOwnProperty.call(value, key));
+  if (!exact(data, ['format', 'version', 'mode', 'exportedAt', 'costs']) || data.format !== 'marginkit-cost-register' || ![1, 2].includes(data.version)) {
+    throw new Error('지원하는 MarginKit 원가 백업 버전 1 또는 2가 아닙니다.');
+  }
+  if (!['real', 'demo'].includes(data.mode) || typeof data.exportedAt !== 'string' ||
+      !Number.isFinite(Date.parse(data.exportedAt)) || new Date(data.exportedAt).toISOString() !== data.exportedAt ||
+      !Array.isArray(data.costs) || data.costs.length > 20000) throw new Error('백업 메타데이터 또는 상품 수가 올바르지 않습니다.');
+  if (!withinDecimalBudget(data.costs.map(entry => entry?.[1] || {}), ['unitCost', 'unitCostExact'])) throw new Error('백업 숫자 데이터가 처리 한도를 초과했습니다.');
+  const costs = new Map();
+  for (const entry of data.costs) {
+    if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== 'string' ||
+        !(exact(entry[1], ['product', 'sku', 'unitCost']) || (data.version === 2 && exact(entry[1], ['product', 'sku', 'unitCost', 'unitCostExact'])))) throw new Error('백업 상품 형식이 올바르지 않습니다.');
+    const [key, item] = entry;
+    if (typeof item.product !== 'string' || !item.product.trim() || typeof item.sku !== 'string' ||
+        typeof item.unitCost !== 'number' || !Number.isFinite(item.unitCost) || item.unitCost < 0 || item.unitCost > 1e12 ||
+        key !== (item.sku ? `sku:${item.sku}` : `name:${norm(item.product)}`) || costs.has(key) || !validCostPrecision(item)) {
+      throw new Error('상품 키·원가 또는 중복 상품이 올바르지 않습니다. 전체 복원을 중단했습니다.');
+    }
+    costs.set(key, { product: item.product, sku: item.sku, unitCost: item.unitCost, ...(Object.prototype.hasOwnProperty.call(item, 'unitCostExact') ? { unitCostExact: item.unitCostExact } : {}) });
+  }
+  return { mode: data.mode, costs };
+}
+
+function planCostMerge(current, incoming) {
+  const merged = new Map(current);
+  let skipped = 0;
+  for (const [key, item] of incoming) {
+    if (merged.has(key)) skipped++;
+    else merged.set(key, item);
+  }
+  if (merged.size > 20000) throw new Error('병합 후 등록 원가는 20,000개 이하이어야 합니다.');
+  if (!withinDecimalBudget([...merged.values()], ['unitCost', 'unitCostExact'])) throw new Error('병합 후 원가 숫자 데이터가 처리 한도를 초과합니다.');
+  return { merged, skipped, added: merged.size - current.size };
+}
+
+function cancelCostRestore() {
+  costRestoreGeneration++;
+  pendingCostRestore = null;
+  $('#costRestoreBackdrop').classList.remove('show');
+  $('#costRestoreFile').value = '';
+  $('#btnConfirmCostRestore').disabled = true;
+}
+
+async function previewCostRestore(file) {
+  cancelCostRestore();
+  if (!file) return;
+  const generation = costRestoreGeneration;
+  const mode = state.isDemo;
+  const original = state.costs;
+  const fingerprint = JSON.stringify([...original]);
+  try {
+    if (!Number.isFinite(file.size) || file.size < 0 || file.size > 10 * 1024 * 1024) throw new Error('JSON 백업은 10MB 이하만 지원합니다.');
+    const stored = mode ? null : localStorage.getItem(STORAGE_KEY_COSTS);
+    // A different tab may have changed persistence before this preview began.
+    // Never merge stale memory over a newer persisted register.
+    if (!mode && (stored === null ? original.size !== 0 : JSON.stringify(JSON.parse(stored)) !== fingerprint)) {
+      throw new Error('현재 원가와 저장된 원가가 다릅니다. 새로고침 후 파일을 다시 선택해 주세요.');
+    }
+    const parsed = validateCostSnapshot(await file.text());
+    if (generation !== costRestoreGeneration) return;
+    if (mode !== state.isDemo || original !== state.costs || fingerprint !== JSON.stringify([...state.costs])) throw new Error('원가 또는 모드가 변경되었습니다. 파일을 다시 선택해 주세요.');
+    if (parsed.mode !== (mode ? 'demo' : 'real')) throw new Error('데모와 실제 원가 백업은 서로 다른 모드에서 복원할 수 없습니다.');
+    const { merged, skipped, added } = planCostMerge(original, parsed.costs);
+    if (!calculationWithinBudget(state.transactions || [], merged)) throw new Error('복원 후 계산 결과가 처리 한도를 초과합니다. 분석 파일을 작게 나누어 주세요.');
+    pendingCostRestore = { generation, mode, original, fingerprint, stored, merged, added };
+    $('#costRestoreSummary').textContent = `${mode ? '데모' : '실제'} 원가: 현재 ${original.size}개 · 파일 ${parsed.costs.size}개 · 새로 추가 ${added}개 · 기존 키와 겹쳐 건너뜀 ${skipped}개. 기존 상품은 원가가 달라도 덮어쓰지 않습니다. 최종 ${merged.size}개.`;
+    $('#costRestorePreview').textContent = [...parsed.costs.values()].slice(0, 5).map(c => `${c.product} / ${c.sku || '(상품명 키)'} / ${c.unitCostExact ?? c.unitCost}`).join('\n') || '빈 백업: 추가할 상품이 없습니다.';
+    $('#btnConfirmCostRestore').disabled = added === 0;
+    $('#costRestoreBackdrop').classList.add('show');
+    $('#btnCancelCostRestore').focus();
+  } catch (error) {
+    if (generation === costRestoreGeneration) { cancelCostRestore(); toast(error.message || '백업 파일을 읽지 못했습니다.'); }
+  }
+}
+
+function confirmCostRestore() {
+  const pending = pendingCostRestore;
+  if (!pending || !pending.added) return;
+  try {
+    if (pending.generation !== costRestoreGeneration || pending.mode !== state.isDemo || pending.original !== state.costs ||
+        pending.fingerprint !== JSON.stringify([...state.costs])) throw new Error('미리보기 이후 원가 또는 모드가 변경되었습니다. 파일을 다시 선택해 주세요.');
+    if (!calculationWithinBudget(state.transactions || [], pending.merged)) throw new Error('복원 후 계산 결과가 처리 한도를 초과합니다.');
+    if (!pending.mode) {
+      if (localStorage.getItem(STORAGE_KEY_COSTS) !== pending.stored) throw new Error('다른 탭에서 저장된 원가가 변경되었습니다. 새로고침 후 다시 시도해 주세요.');
+      // localStorage.setItem is atomic; publish memory only after persistence succeeds.
+      if (!persistCosts(pending.merged, false)) { cancelCostRestore(); return; }
+    }
+  } catch (error) {
+    cancelCostRestore();
+    toast(error.message || '저장하지 못했습니다. 원가는 변경되지 않았습니다.');
+    return;
+  }
+  state.costs = pending.merged;
+  cancelCostRestore();
+  renderProducts(); renderDashboard(); renderResults();
+  toast(`원가 ${pending.added}개를 추가했습니다. 기존 원가는 유지되었습니다.`);
 }
 
 // --- Add Product Modal Handlers ---
@@ -1437,15 +1676,16 @@ function saveNewProduct() {
     $('#newProdName').focus();
     return;
   }
-  if (cost === null || cost < 0) {
+  if (cost === null || MKDecimal.compare(MKDecimal.input($('#newProdCost').value), '0') < 0) {
     toast('0 이상의 올바른 원가를 입력해 주세요.');
     $('#newProdCost').focus();
     return;
   }
 
   const key = sku ? `sku:${sku}` : `name:${norm(name)}`;
-  state.costs.set(key, { product: name, sku, unitCost: cost });
-  saveCostsToStorage();
+  const nextCosts = new Map(state.costs);
+  nextCosts.set(key, makeCostRecord(name, sku, $('#newProdCost').value));
+  if (!commitCosts(nextCosts)) return;
 
   closeAddProductModal();
   renderProducts();
@@ -1474,6 +1714,17 @@ $('#btnDownloadCostTpl').onclick = downloadCostTemplate;
 $('#btnImportTpl').onclick = downloadSalesTemplate;
 $('#btnExportCurrentCostTpl').onclick = exportCurrentProductsCostTemplate;
 $('#btnExportCurrentCost').onclick = exportCurrentProductsCostTemplate;
+$('#btnExportRegisteredCosts').onclick = exportRegisteredCosts;
+$('#btnBackupCostRegister').onclick = exportCostRegisterJson;
+$('#btnExportStoredCostRaw').onclick = () => {
+  if (typeof loadCostsFromStorage.revision === 'string') downloadBlob(loadCostsFromStorage.revision, 'marginkit-stored-cost-original.txt', 'text/plain;charset=utf-8');
+};
+$('#btnRestoreCostRegister').onclick = () => { cancelCostRestore(); $('#costRestoreFile').click(); };
+$('#costRestoreFile').onchange = event => previewCostRestore(event.target.files[0]);
+$('#btnCancelCostRestore').onclick = cancelCostRestore;
+$('#btnConfirmCostRestore').onclick = confirmCostRestore;
+$('#costRestoreBackdrop').addEventListener('click', event => { if (event.target.id === 'costRestoreBackdrop') cancelCostRestore(); });
+document.addEventListener('keydown', event => { if (event.key === 'Escape') cancelCostRestore(); });
 $('#btnExportCosts').onclick = exportCurrentProductsCostTemplate;
 $('#btnExport').onclick = downloadResults;
 
@@ -1497,8 +1748,21 @@ $('#chartSortProfit').onclick = () => {
 
 $('#btnReset').onclick = () => {
   if (confirm('현재 업로드한 데이터와 등록된 상품 원가를 모두 초기화하시겠습니까?')) {
-    invalidateImportReads();
     const leavingDemo = state.isDemo;
+    let presetResetFailed = false;
+    if (!leavingDemo) {
+      try {
+        checkCostStorageRevision(true);
+        localStorage.removeItem(STORAGE_KEY_COSTS);
+        loadCostsFromStorage.revision = null;
+        loadCostsFromStorage.blocked = false;
+      } catch (error) {
+        toast('초기화하지 못했습니다. 현재 원가·분석은 유지됩니다. ' + (error.message || '저장소 권한을 확인해 주세요.'));
+        return;
+      }
+      try { localStorage.removeItem(STORAGE_KEY_PRESET); } catch { presetResetFailed = true; }
+    }
+    invalidateImportReads();
     Object.assign(state, {
       salesWorkbook: null, costWorkbook: null,
       salesSource: 'none', costSource: 'none',
@@ -1512,9 +1776,6 @@ $('#btnReset').onclick = () => {
       costs: leavingDemo ? loadCostsFromStorage() : new Map(),
       isDemo: false
     });
-    if (!leavingDemo) {
-      try { localStorage.removeItem(STORAGE_KEY_COSTS); localStorage.removeItem(STORAGE_KEY_PRESET); } catch (e) { /* Storage can be blocked. */ }
-    }
     $('#salesFile').value = '';
     $('#costFile').value = '';
     ['sales', 'cost'].forEach(updateFileStatus);
@@ -1528,7 +1789,7 @@ $('#btnReset').onclick = () => {
     setPage('dashboard');
     toast(leavingDemo
       ? '예시 데이터를 종료했습니다. 저장된 실제 원가는 유지됩니다.'
-      : '모든 데이터와 원가 설정이 초기화되었습니다.');
+      : presetResetFailed ? '원가·분석은 초기화했지만 저장된 열 매핑 설정은 삭제하지 못했습니다.' : '모든 데이터와 원가 설정이 초기화되었습니다.');
   }
 };
 
@@ -1622,5 +1883,6 @@ renderDashboard();
 renderProducts();
 renderResults();
 setPage(window.location.hash.slice(1) || 'dashboard', false);
+if (loadCostsFromStorage.blocked) toast('저장 원가를 읽지 못해 덮어쓰기를 중지했습니다. 상품 원가 관리에서 원본을 보관하고 복구해 주세요.');
 
 })();

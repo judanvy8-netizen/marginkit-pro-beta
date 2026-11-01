@@ -1,7 +1,8 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const suite = require('../suite-tools.js');
+const SUITE_PATH = process.env.SUITE_SOURCE || require.resolve('../suite-tools.js');
+const suite = require(SUITE_PATH);
 let count = 0;
 function test(name, fn) { fn(); count++; console.log('PASS', name); }
 const base = suite.defaults().simulator;
@@ -68,10 +69,11 @@ test('advertising exactly at break-even has zero residue', () => {
   near(at.profit, 0); near(at.adMultiple, 1);
 });
 test('zero volume does not force one sale', () => assert.equal(suite.calculateSimulator({ ...base, units: 0 }).monthly, 0));
-for (const [field, value] of [['sell', -1], ['cost', Infinity], ['ship', ''], ['ad', NaN], ['feePct', 100.1], ['targetPct', -1], ['units', 1.5], ['units', 1e10], ['fixed', 1e13]]) {
+for (const [field, value] of [['sell', -1], ['cost', Infinity], ['ship', ''], ['ad', NaN], ['feePct', 100.1], ['targetPct', -1], ['units', 1e10], ['fixed', 1e13]]) {
   test('reject invalid simulator ' + field + ':' + value, () => assert.throws(() => suite.calculateSimulator({ ...base, [field]: value }), RangeError));
 }
-test('reject monthly products beyond precise numeric range', () => assert.throws(() => suite.calculateSimulator({ ...base, sell: 1e12, units: 1e9 }), RangeError));
+test('large monthly products retain exact decimal output beyond Number integer range', () => assert.equal(suite.calculateSimulator({ ...base,sell:1e12,units:1e9,cost:0,ship:0,ad:0,fixed:0,feePct:0 }).exact.monthly,'1000000000000000000000'));
+test('fractional quantity is preserved',()=>assert.equal(suite.calculateSimulator({...base,units:'1.5'}).exact.units,'1.5'));
 test('settlement combines taxable and exempt sales separately', () => {
   const result = suite.calculateSettlement([{ channel: '과세', sales: 11000, feePct: 10, vatPct: 10 }, { channel: '면세', sales: 2000, feePct: 0, vatPct: 0 }]);
   near(result.totals.vat, 1000); near(result.totals.supply, 12000); near(result.totals.take, 11900);
@@ -183,7 +185,9 @@ function mountDOM(store = storage()) {
   const downloads = []; const revoked = [];
   const context = { document, localStorage: store, URL: { createObjectURL(blob) { downloads.push(blob); return 'blob:download'; }, revokeObjectURL(url) { revoked.push(url); } }, Blob, setTimeout(fn) { fn(); } };
   context.window = context;
-  vm.runInNewContext(fs.readFileSync(require.resolve('../suite-tools.js'), 'utf8'), context);
+  context.MKDecimal = require('../exact-decimal.js');
+  context.MKRational = require('../exact-rational.js');
+  vm.runInNewContext(fs.readFileSync(SUITE_PATH, 'utf8'), context);
   return { document, store, context, downloads, revoked, get: id => document.getElementById(id) };
 }
 test('both real modules mount without HTML sinks or vendor libraries', () => {
@@ -256,6 +260,55 @@ test('failed reset write preserves current input', () => {
   view.store.setItem = () => { throw new Error('denied'); }; view.context.confirm = () => true;
   view.get('page-simulator-reset').dispatch('click'); assert.equal(view.get('suite-cost').value, '777');
 });
+test('DOM simulator keeps fractional quantity and exact zero profit without integer rounding',()=>{
+ const h=mountDOM();for(const [key,value] of Object.entries({sell:'.3',cost:'.1',ship:'.2',ad:'0',fixed:'0',feePct:'0',units:'1.5'}))h.get('suite-'+key).value=value;
+ h.get('suite-units').dispatch('input');assert.equal(h.get('suite-result-profit').textContent,'0원');assert.equal(h.get('suite-result-monthly').textContent,'0원');assert.equal(h.get('suite-result-profit').className,'suite-gain');
+ assert.equal(JSON.parse(h.store.getItem(suite.DRAFT_KEY)).simulator.units,'1.5');
+});
+test('DOM tiny exact loss uses loss styling despite numeric projection underflow',()=>{
+ const h=mountDOM(),tiny='0.'+'0'.repeat(330)+'1';for(const [key,value] of Object.entries({sell:'0',cost:tiny,ship:'0',ad:'0',fixed:'0',feePct:'0',units:'1'}))h.get('suite-'+key).value=value;
+ h.get('suite-cost').dispatch('input');assert.equal(h.get('suite-result-profit').className,'suite-loss');assert.equal(h.get('suite-result-profit').textContent,'-'+tiny+'원');
+});
+test('DOM VAT recurring display is explicitly approximate, not silently rounded to won',()=>{
+ const h=mountDOM();h.get('suite-row-0-sales').value='1';h.get('suite-row-0-feePct').value='3.3';h.get('suite-settlement-rows').dispatch('input');
+ assert.equal(h.get('suite-settlement-vat').textContent,'≈0.090909090909원');assert.equal(h.get('suite-settlement-take').textContent,'0.967원');
+});
+test('missing exact modules prevent suite mounting rather than silently using binary fallback',()=>{
+ const document=createDOM(),context={document};context.window=context;vm.runInNewContext(fs.readFileSync(SUITE_PATH,'utf8'),context);
+ assert.ok(document.getElementById('page-simulator').textContent.includes('정확한 계산 모듈'));assert.equal(document.getElementById('suite-result-profit'),undefined);
+});
+
+test('independently loaded drafts cannot overwrite a newer whole-draft revision',()=>{
+ const store=storage({[suite.DRAFT_KEY]:JSON.stringify(suite.defaults())});const a=suite.loadDraft(store).draft,b=suite.loadDraft(store).draft;
+ b.settlement[0].sales='987.654321';assert.equal(suite.saveDraft(store,b),true);const newer=store.getItem(suite.DRAFT_KEY);
+ a.simulator.cost='123.456';assert.equal(suite.saveDraft(store,a),false);assert.equal(store.getItem(suite.DRAFT_KEY),newer);assert.equal(a.simulator.cost,'123.456');
+});
+test('new untracked default draft cannot overwrite a pre-existing saved draft',()=>{
+ const old=suite.defaults();old.simulator.cost='456';const bytes=JSON.stringify(old),store=storage({[suite.DRAFT_KEY]:bytes});assert.equal(suite.saveDraft(store,suite.defaults()),false);assert.equal(store.getItem(suite.DRAFT_KEY),bytes);
+});
+test('malformed loaded draft is protected even when saveDraft is called directly',()=>{
+ const store=storage({[suite.DRAFT_KEY]:'{original malformed'}),loaded=suite.loadDraft(store);loaded.draft.simulator.cost='12.34';assert.equal(suite.saveDraft(store,loaded.draft),false);assert.equal(store.getItem(suite.DRAFT_KEY),'{original malformed');
+});
+test('failed suite save does not advance revision or erase unsaved input',()=>{
+ const store=storage({[suite.DRAFT_KEY]:JSON.stringify(suite.defaults())}),draft=suite.loadDraft(store).draft,original=store.setItem,old=store.getItem(suite.DRAFT_KEY);draft.simulator.cost='123.456789';store.setItem=()=>{throw Error('quota');};assert.equal(suite.saveDraft(store,draft),false);assert.equal(store.getItem(suite.DRAFT_KEY),old);assert.equal(draft.simulator.cost,'123.456789');store.setItem=original;assert.equal(suite.saveDraft(store,draft),true);
+});
+test('initial storage-read failure cannot later overwrite unread existing bytes',()=>{
+ const store=storage({[suite.DRAFT_KEY]:JSON.stringify(suite.defaults())}),original=store.getItem;store.getItem=()=>{throw Error('read denied');};const loaded=suite.loadDraft(store);store.getItem=original;loaded.draft.simulator.cost='987';const before=store.getItem(suite.DRAFT_KEY);assert.equal(suite.saveDraft(store,loaded.draft),false);assert.equal(store.getItem(suite.DRAFT_KEY),before);
+});
+test('DOM stale-tab warning keeps current edits visible without overwriting another tab',()=>{
+ const store=storage({[suite.DRAFT_KEY]:JSON.stringify(suite.defaults())}),a=mountDOM(store),b=mountDOM(store);
+ b.get('suite-row-0-sales').value='987.654321';b.get('suite-settlement-rows').dispatch('input');const newer=store.getItem(suite.DRAFT_KEY);
+ a.get('suite-cost').value='123.456';a.get('suite-cost').dispatch('input');assert.equal(a.get('suite-cost').value,'123.456');assert.equal(store.getItem(suite.DRAFT_KEY),newer);assert.ok(a.get('page-simulator-storage').textContent.includes('저장되지 않았습니다'));
+ a.context.confirm=()=>true;a.get('page-simulator-reset').dispatch('click');assert.equal(store.getItem(suite.DRAFT_KEY),newer);assert.equal(a.get('suite-cost').value,'123.456');assert.ok(a.get('page-simulator-storage').textContent.includes('초기화하지 않았습니다'));
+});
+test('confirmed damaged-draft recovery updates revision and permits subsequent ordinary saves',()=>{
+ const store=storage({[suite.DRAFT_KEY]:'{broken'}),h=mountDOM(store);h.context.confirm=()=>false;h.get('page-simulator-reset').dispatch('click');assert.equal(store.getItem(suite.DRAFT_KEY),'{broken');
+ h.context.confirm=()=>true;h.get('page-simulator-reset').dispatch('click');assert.equal(JSON.parse(store.getItem(suite.DRAFT_KEY)).simulator.cost,'13200');h.get('suite-cost').value='0.123456';h.get('suite-cost').dispatch('input');assert.equal(JSON.parse(store.getItem(suite.DRAFT_KEY)).simulator.cost,'0.123456');
+});
+test('external draft deletion is not silently resurrected by a stale tab',()=>{
+ const store=storage({[suite.DRAFT_KEY]:JSON.stringify(suite.defaults())}),draft=suite.loadDraft(store).draft;store.removeItem(suite.DRAFT_KEY);draft.simulator.cost='3';assert.equal(suite.saveDraft(store,draft),false);assert.equal(store.getItem(suite.DRAFT_KEY),null);
+});
+
 (async () => {
   const fallback = mountDOM();
   await fallback.get('suite-sim-copy').listeners.click[0]();

@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SOURCE_PATH = path.join(ROOT, 'app.js');
+const SOURCE_PATH = process.env.APP_SOURCE || path.join(ROOT, 'app.js');
 const BASE_COMMIT = '34ac6229d2b76e7a1878c70fcc989345430fafdc';
 const BASE_SOURCE_SHA256 = '5ef4f2cd936e4ac87c56c4904b7692218facb9f642f71cd0df31065b9d9b4c70';
 const V1_SOURCE_SHA256 = '9816e6c9d53914738afb5da19d9dad7f966262e42512457445a248d8956f1bcf';
@@ -131,10 +131,15 @@ function makeHarness({ emptyCostKey = false, isDemo = true } = {}) {
     $$(selector) { return selector === '.mapping-select' ? selects : []; }
   };
   vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'exact-decimal.js'), 'utf8'), ctx);
+  vm.runInContext(source.parseNum + source.norm + source.loadCosts, ctx);
+  vm.runInContext("loadCostsFromStorage()", ctx);
   return { ctx, state, storage, storageOps, toastLog, elements, selects, pendingReads, baselineCosts: storage.get(COST_KEY) };
 }
 function install(h, ...names) {
+  const revisionState = h.ctx.loadCostsFromStorage ? { ...h.ctx.loadCostsFromStorage } : {};
   vm.runInContext(names.map(name => source[name]).join('\n'), h.ctx);
+  if (names.includes('loadCosts')) Object.assign(h.ctx.loadCostsFromStorage, revisionState);
 }
 function installFileFlow(h) {
   install(h, 'loadCosts', 'saveCosts', 'savePreset', 'parseNum', 'norm', 'ingestSales', 'ingestCosts',
@@ -533,6 +538,89 @@ check('demo reset still exits without deleting real costs; real F19 reset still 
   const real = makeHarness({ isDemo: false }); install(real, 'loadCosts', 'invalidate', 'resetHandler');
   vm.runInContext(source.resetHandler, real.ctx); real.elements.get('#btnReset').onclick();
   assert.equal(real.storage.has(COST_KEY), false); assert.equal(real.state.costs.size, 0);
+});
+
+check('failed ordinary cost save preserves prior register and never reports success', () => {
+  const h=makeHarness({isDemo:false});install(h,'loadCosts','saveCosts','parseNum','setCost');
+  const before=snapshotImportState(h);h.ctx.localStorage.setItem=()=>{throw Error('quota');};
+  assert.equal(vm.runInContext("setCost({product:'Actual',sku:'CP-001'},'8888')",h.ctx),false);
+  assertImportStateUnchanged(h,before);assert.match(h.toastLog.at(-1),/저장하지 못/);
+});
+check('failed candidate deletion cannot remove an existing cost in memory', () => {
+  const h=makeHarness({isDemo:false});install(h,'saveCosts');const before=snapshotImportState(h);
+  h.ctx.localStorage.setItem=()=>{throw Error('quota');};
+  assert.equal(vm.runInContext("commitCosts(new Map())",h.ctx),false);assertImportStateUnchanged(h,before);
+});
+check('failed imported cost persistence leaves demo and sales transactions unchanged', () => {
+  const h=makeHarness();installFileFlow(h);seedActualSales(h);
+  completeSyntheticRead(startSyntheticRead(h,'cost','costs.csv'),['Product','SKU','UnitCost'],[{Product:'new',SKU:'NEW',UnitCost:10}]);
+  const before=snapshotImportState(h);h.ctx.localStorage.setItem=()=>{throw Error('quota');};
+  vm.runInContext('processImport()',h.ctx);assertImportStateUnchanged(h,before);assert.match(h.toastLog.at(-1),/저장하지 못/);
+});
+check('manual add modal stays open and preserves costs when storage fails', () => {
+  const h=makeHarness({isDemo:false});install(h,'saveCosts','parseNum','norm');let closed=false;
+  h.ctx.closeAddProductModal=()=>{closed=true;};h.ctx.$('#newProdName').value='new';h.ctx.$('#newProdSku').value='NEW';h.ctx.$('#newProdCost').value='50';
+  h.ctx.localStorage.setItem=()=>{throw Error('quota');};const before=snapshotImportState(h);
+  vm.runInContext(between('function saveNewProduct() {','// --- Event Listeners & Bindings ---'),h.ctx);
+  vm.runInContext('saveNewProduct()',h.ctx);assertImportStateUnchanged(h,before);assert.equal(closed,false);assert.match(h.toastLog.at(-1),/저장하지 못/);
+});
+
+check('failed demo flush leaves an in-flight import generation and status intact', () => {
+  const h=makeHarness({isDemo:false});installFileFlow(h);install(h,'loadDemo');
+  const pending=startSyntheticRead(h,'cost','pending.csv');const generation=h.state.importGeneration.cost;
+  h.ctx.localStorage.setItem=()=>{throw Error('quota');};vm.runInContext('loadDemo()',h.ctx);
+  assert.equal(h.state.isDemo,false);assert.equal(h.state.importGeneration.cost,generation);
+  completeSyntheticRead(pending,['Product','SKU','UnitCost'],[{Product:'new',SKU:'NEW',UnitCost:10}]);
+  assert.equal(h.state.importStatus.cost,'ready');assert.ok(h.state.costWorkbook);
+});
+
+check('stale real-tab edits preserve a newer persisted register', () => {
+  const h=makeHarness({isDemo:false});install(h,'loadCosts','saveCosts','parseNum','setCost');
+  const newer=JSON.stringify([...JSON.parse(h.storage.get(COST_KEY)),['sku:NEW',{product:'new tab',sku:'NEW',unitCost:77}]]);
+  h.storage.set(COST_KEY,newer);const before=h.state.costs;
+  assert.equal(vm.runInContext("setCost({product:'Actual',sku:'CP-001'},'8888')",h.ctx),false);
+  assert.equal(h.storage.get(COST_KEY),newer);assert.equal(h.state.costs,before);assert.match(h.toastLog.at(-1),/다른 탭/);
+});
+check('entering Demo never flushes stale memory over newer persisted costs', () => {
+  const h=makeHarness({isDemo:false});installFileFlow(h);install(h,'loadDemo');
+  const newer=JSON.stringify([...JSON.parse(h.storage.get(COST_KEY)),['sku:NEW',{product:'new tab',sku:'NEW',unitCost:77}]]);h.storage.set(COST_KEY,newer);
+  vm.runInContext('loadDemo()',h.ctx);assert.equal(h.state.isDemo,false);assert.equal(h.storage.get(COST_KEY),newer);assert.equal(h.storageOps.length,0);
+});
+check('malformed saved JSON blocks ordinary save and Demo without overwriting original bytes', () => {
+  const h=makeHarness({isDemo:false});installFileFlow(h);install(h,'loadDemo','setCost');h.storage.set(COST_KEY,'{corrupt original');
+  h.state.costs=vm.runInContext('loadCostsFromStorage()',h.ctx);assert.equal(h.state.costs.size,0);
+  assert.equal(vm.runInContext("setCost({product:'New',sku:'NEW'},'10')",h.ctx),false);vm.runInContext('loadDemo()',h.ctx);
+  assert.equal(h.storage.get(COST_KEY),'{corrupt original');assert.equal(h.state.isDemo,false);assert.equal(h.storageOps.length,0);
+});
+check('partly invalid or duplicate saved registers block writes instead of silently dropping records', () => {
+  for(const raw of [JSON.stringify([storageBaseCosts[0],['sku:BAD',{product:'bad',sku:'BAD',unitCost:-1}]]),JSON.stringify([storageBaseCosts[0],storageBaseCosts[0]])]) {
+    const h=makeHarness({isDemo:false});install(h,'loadCosts','saveCosts');h.storage.set(COST_KEY,raw);h.state.costs=vm.runInContext('loadCostsFromStorage()',h.ctx);
+    assert.equal(vm.runInContext('saveCostsToStorage()',h.ctx),false);assert.equal(h.storage.get(COST_KEY),raw);assert.equal(h.storageOps.length,0);
+  }
+});
+check('failed real reset preserves memory, analysis, pending reads and stored costs', () => {
+  const h=makeHarness({isDemo:false});install(h,'loadCosts','invalidate','resetHandler');vm.runInContext(source.resetHandler,h.ctx);
+  const before=snapshotImportState(h);h.ctx.localStorage.removeItem=()=>{throw Error('SecurityError');};const generation=JSON.stringify(h.state.importGeneration);
+  h.elements.get('#btnReset').onclick();assertImportStateUnchanged(h,before);assert.equal(JSON.stringify(h.state.importGeneration),generation);assert.match(h.toastLog.at(-1),/초기화하지 못/);
+});
+check('stale real reset cannot delete changes made in another tab', () => {
+  const h=makeHarness({isDemo:false});install(h,'loadCosts','invalidate','resetHandler');vm.runInContext(source.resetHandler,h.ctx);h.storage.set(COST_KEY,'newer raw');
+  h.elements.get('#btnReset').onclick();assert.equal(h.storage.get(COST_KEY),'newer raw');assert.equal(h.storageOps.length,0);
+});
+check('confirmed recovery reset clears malformed original only after explicit action', () => {
+  const h=makeHarness({isDemo:false});install(h,'loadCosts','invalidate','resetHandler');h.storage.set(COST_KEY,'{corrupt');h.state.costs=vm.runInContext('loadCostsFromStorage()',h.ctx);vm.runInContext(source.resetHandler,h.ctx);
+  h.elements.get('#btnReset').onclick();assert.equal(h.storage.has(COST_KEY),false);assert.equal(h.ctx.loadCostsFromStorage.blocked,false);assert.equal(h.state.costs.size,0);
+});
+check('secondary mapping reset failure is disclosed rather than claiming all settings cleared', () => {
+  const h=makeHarness({isDemo:false});install(h,'loadCosts','invalidate','resetHandler');vm.runInContext(source.resetHandler,h.ctx);const originalRemove=h.ctx.localStorage.removeItem;
+  h.ctx.localStorage.removeItem=key=>{if(key===PRESET_KEY)throw Error('preset denied');originalRemove(key);};
+  h.elements.get('#btnReset').onclick();assert.equal(h.storage.has(COST_KEY),false);assert.equal(h.storage.has(PRESET_KEY),true);assert.match(h.toastLog.at(-1),/매핑 설정은 삭제하지 못/);
+});
+
+check('oversized derived shared-cost import is rejected before mode, transaction or storage mutation', () => {
+  const h=makeHarness();installFileFlow(h);seedActualSales(h);h.state.salesRows=Array.from({length:400},(_,i)=>({Product:'Shared',SKU:'S'+i,Revenue:'1'}));
+  const tiny='0.'+'0'.repeat(9997)+'1';h.storage.set(COST_KEY,JSON.stringify([['name:shared',{product:'Shared',sku:'',unitCost:0,unitCostExact:tiny}]]));
+  const before=snapshotImportState(h);vm.runInContext('processImport()',h.ctx);assertImportStateUnchanged(h,before);assert.match(h.toastLog.at(-1),/계산 결과/);
 });
 
 console.log(`SUMMARY pass=${pass} fail=${fail}`);
