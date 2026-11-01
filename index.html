@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="referrer" content="no-referrer" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; script-src-attr 'none'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none';" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; script-src-attr 'none'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://orvantro-insights-api.orvantro.workers.dev; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none';" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="theme-color" content="#081321" />
 <title>마진킷 (MarginKit) — 셀러 정산·마진·광고 분석 도구</title>
@@ -1347,13 +1347,14 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 <script src="./orvantro-analytics.js" defer></script>
 <section class="ov-card" aria-label="중앙 방문 집계 설정" style="margin:24px auto;padding:24px;max-width:1180px">
   <h3>선택적 방문 집계</h3>
-  <p>서버 연결 후 동의한 방문만 집계합니다 · 사이트 이름과 임시 조회·탭 식별자만 전송하며 정산·원가·시나리오 데이터는 보내지 않습니다 · 네트워크 제공자는 연결 처리 중 IP 주소를 처리할 수 있습니다</p>
+  <p>통계 수집에 동의한 방문만 집계합니다 · 사이트 이름과 임시 조회·탭 식별자만 전송하며 정산·원가·시나리오 데이터는 보내지 않습니다 · 네트워크 제공자는 연결 처리 중 IP 주소를 처리할 수 있습니다</p>
   <button id="central-allow" type="button" disabled>중앙 집계 동의</button>
   <button id="central-deny" type="button">동의 철회</button>
-  <p id="central-consent-status" role="status">저장 서버 연결 전 · 수집 꺼짐</p>
+  <p id="central-consent-status" role="status">통계 수집 꺼짐 · 허용하면 현재 페이지부터 집계</p>
 </section>
 <script src="./central-config.js" defer></script>
 <script src="./central-collector.js" defer></script>
 <script src="./central-controls.js" defer></script>
+<script src="./workspace-entry.js" defer></script>
 </body>
 </html>
