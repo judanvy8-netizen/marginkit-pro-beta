@@ -2,8 +2,8 @@
 (function (w) {
   'use strict';
   var cfg = w.ORVANTRO_CENTRAL || {};
-  var CONSENT = 'orvantro_central_consent_v1:' + cfg.site;
-  var SESSION = 'orvantro_central_tab_session_v1:' + cfg.site;
+  var CONSENT = 'orvantro_central_consent_v2:' + cfg.site;
+  var SESSION = 'orvantro_central_tab_session_v2:' + cfg.site;
   var TTL = 30 * 60 * 1000;
   var sites = ['orvantro', 'orvantro-insights', 'marginkit-pro-beta'];
   var sent = false, pending = false, attempted = false, result = null;
@@ -54,7 +54,7 @@
     result = null;
     changed();
     try {
-      var body = JSON.stringify({ v: 1, site: cfg.site, eventId: uuid(), sessionId: session() });
+      var body = JSON.stringify({ v: 2, site: cfg.site, eventId: uuid(), sessionId: session() });
       attempted = true;
       // No URL, query string, page title, referrer, product data or credentials leave the page
       var response = await w.fetch(endpoint(), {

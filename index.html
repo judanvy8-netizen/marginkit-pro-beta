@@ -1347,13 +1347,13 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 <script src="./orvantro-analytics.js" defer></script>
 <section class="ov-card" aria-label="중앙 방문 집계 설정" style="margin:24px auto;padding:24px;max-width:1180px">
   <h3>선택적 방문 집계</h3>
-  <p>통계 수집에 동의한 방문만 집계합니다 · 사이트 이름과 임시 조회·탭 식별자만 전송하며 정산·원가·시나리오 데이터는 보내지 않습니다 · 네트워크 제공자는 연결 처리 중 IP 주소를 처리할 수 있습니다</p>
+  <p>통계 수집에 동의한 방문만 집계합니다 · 사이트 이름과 임시 조회·탭 식별자를 전송하며 접속 국가·기기 유형·운영체제·브라우저 종류를 30일간 보관합니다 · 정산·원가·시나리오 데이터와 IP 원문은 저장하지 않습니다 · 네트워크 제공자는 연결 처리 중 IP 주소를 처리할 수 있습니다</p>
   <button id="central-allow" type="button" disabled>중앙 집계 동의</button>
   <button id="central-deny" type="button">동의 철회</button>
   <p id="central-consent-status" role="status">통계 수집 꺼짐 · 허용하면 현재 페이지부터 집계</p>
 </section>
 <script src="./central-config.js?v=20261101-cloud1" defer></script>
-<script src="./central-collector.js" defer></script>
+<script src="./central-collector.js?v=20261101-audience2" defer></script>
 <script src="./central-controls.js" defer></script>
 <script src="./workspace-entry.js?v=20261101-cloud2" defer></script>
 </body>
