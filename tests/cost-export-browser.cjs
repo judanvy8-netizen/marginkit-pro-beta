@@ -25,7 +25,7 @@ const server=http.createServer((req,res)=>{
  const json=JSON.parse((await download('#btnBackupCostRegister')).csv);assert.deepEqual(json.costs,JSON.parse(saved));console.log('PASS JSON browser download preserves all original cost entries');
  assert.equal((await download()).csv,first.csv);console.log('PASS repeated download is stable');
  await page.screenshot({path:path.join(root,'review/cost-export-desktop.png'),fullPage:true});
- await page.click('#btnDemo');await page.goto(base+'/#products');const demo=await download();assert.match(demo.name,/demo/);assert.equal(await page.evaluate(()=>localStorage.getItem('marginkit_costs_v2')),saved);console.log('PASS demo export labeled separately; real storage preserved');
+ await page.goto(base+'/#dashboard');await page.click('#btnDemo');await page.goto(base+'/#products');const demo=await download();assert.match(demo.name,/demo/);assert.equal(await page.evaluate(()=>localStorage.getItem('marginkit_costs_v2')),saved);console.log('PASS demo export labeled separately; real storage preserved');
  await page.reload();await page.goto(base+'/#products');assert.equal((await download()).csv,first.csv);console.log('PASS reload restores real cost export');
  const restoreSnapshot={format:'marginkit-cost-register',version:1,mode:'real',exportedAt:new Date().toISOString(),costs:[['sku:A',{product:'Do not overwrite',sku:'A',unitCost:999}],['sku:=NEW',{product:'한글 \"인용\"\n새 상품',sku:'=NEW',unitCost:12.5}]]};
  const upload=async data=>page.locator('#costRestoreFile').setInputFiles({name:'restore.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(data))});

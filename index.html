@@ -5,7 +5,7 @@
 <meta name="referrer" content="no-referrer" />
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; script-src-attr 'none'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none';" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="theme-color" content="#176b59" />
+<meta name="theme-color" content="#081321" />
 <title>마진킷 (MarginKit) — 셀러 정산·마진·광고 분석 도구</title>
 <meta name="description" content="정산 파일과 원가 분석, 마진·광고 시뮬레이션, 월간 수기 정산을 마진킷에서 함께 사용하세요. 입력 데이터는 브라우저에서 처리되며 서버로 전송하지 않습니다." />
 
@@ -851,11 +851,12 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .ov-foot .made{color:#e2e8f0;font-weight:700}
 
 </style>
+<link rel="stylesheet" href="./visual.css">
 </head>
 <body>
 
 <div class="ov-bar">
-  <div><a class="ov-co" href="https://orvantro.com/">ORVANTRO</a> · <span>오르반트로</span></div>
+  <div><a class="ov-co" href="https://orvantro.com/">ORVANTRO</a></div>
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <span class="ov-beta">BETA · 결제/거래 불가</span>
     <a href="https://orvantro.com/">공식 홈페이지</a>
@@ -866,34 +867,34 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   <header class="topbar">
     <a href="#" class="brand" data-page-link="dashboard">
       <div class="brandmark">M</div>
-      <div>마진킷<small>MARGINKIT · by ORVANTRO</small></div>
+      <div>MarginKit<small>정산 · 원가 · 수익 분석</small></div>
     </a>
     <div class="top-actions">
       <div class="privacy-pill"><span class="privacy-dot"></span> 정산·원가 파일은 브라우저에서만 처리 (서버 미전송)</div>
-      <a class="btn btn-sm" href="https://orvantro.com/" style="text-decoration:none">Made by ORVANTRO · 오르반트로</a>
+      <a class="btn btn-sm" href="https://orvantro.com/" style="text-decoration:none">Made by ORVANTRO</a>
       <button class="btn btn-sm" id="btnHelp">도움말 ↗</button>
     </div>
   </header>
 
   <div class="layout">
     <aside class="sidebar">
-      <div class="nav-title">WORKSPACE</div>
-      <button class="nav-item active" data-page="dashboard"><span class="ico">▦</span> 대시보드</button>
-      <button class="nav-item" data-page="import"><span class="ico">⇧</span> 정산 파일 분석</button>
-      <button class="nav-item" data-page="products"><span class="ico">▤</span> 상품 원가 관리</button>
-      <button class="nav-item" data-page="results"><span class="ico">◫</span> 분석 리포트</button>
-      <button class="nav-item" data-page="simulator"><span class="ico">◎</span> 마진·광고 시뮬레이터</button>
-      <button class="nav-item" data-page="settlement"><span class="ico">▥</span> 월간 수기 정산</button>
+      <div class="nav-title">YOUR WORKSPACE</div>
+      <button class="nav-item active" data-page="dashboard"><span class="ico">01</span> 대시보드</button>
+      <button class="nav-item" data-page="import"><span class="ico">02</span> 정산 파일 분석</button>
+      <button class="nav-item" data-page="products"><span class="ico">03</span> 상품 원가 관리</button>
+      <button class="nav-item" data-page="results"><span class="ico">04</span> 분석 리포트</button>
+      <button class="nav-item" data-page="simulator"><span class="ico">05</span> 마진·광고 시뮬레이터</button>
+      <button class="nav-item" data-page="settlement"><span class="ico">06</span> 월간 수기 정산</button>
 
-      <div class="nav-title" style="margin-top:24px">TOOLS & TEMPLATES</div>
+      <div class="nav-title" style="margin-top:24px">FILES & TEMPLATES</div>
       <button class="nav-item" id="btnDownloadSalesTpl"><span class="ico">⇩</span> 정산 샘플 양식</button>
       <button class="nav-item" id="btnDownloadCostTpl"><span class="ico">⇩</span> 원가 샘플 양식</button>
       <button class="nav-item" id="btnExportCurrentCostTpl"><span class="ico">✎</span> 현재 상품 원가표 받기</button>
       <button class="nav-item" id="btnReset" style="color:#e53e3e"><span class="ico">↺</span> 분석 초기화</button>
 
       <div class="side-note">
-        <strong>실수익, 제대로 아습니까?</strong>
-        매출이 올라도 마진이 마이너스인 상품이 있습니다. 정산 수수료와 배송비, 원가를 합산한 진짜 순이익을 확인하세요.
+        <strong>매출 다음의 숫자.</strong>
+        정산 내역에 원가를 더해 추정 이익을 확인하세요. 파일과 계산은 이 브라우저 안에서 처리합니다.
       </div>
     </aside>
 
@@ -903,13 +904,13 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
       <section class="page active" id="page-dashboard">
         <div class="heading-row">
           <div>
-            <div class="eyebrow">OVERVIEW</div>
-            <h1>판매 실수익 대시보드</h1>
-            <p>업로드된 정산 내역과 등록된 원가를 바탕으로 상품별 실제 남는 이익과 수익성을 점검하세요.</p>
+            <div class="eyebrow">01 / SETTLEMENT OVERVIEW</div>
+            <h1>정산 한눈에.</h1>
+            <p>매출에서 수수료와 원가를 빼고, 상품별로 남는 추정 이익을 확인하세요.</p>
           </div>
           <div class="heading-actions">
-            <button class="btn" id="btnDemo">✦ 예시 데이터 체험</button>
-            <button class="btn btn-primary" id="btnStartImport">＋ 정산 파일 분석하기</button>
+            <button class="btn" id="btnDemo">예시 데이터로 둘러보기</button>
+            <button class="btn btn-primary" id="btnStartImport">정산 파일 분석하기 ↗</button>
           </div>
         </div>
 
@@ -959,10 +960,10 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
           <div class="panel panel-pad">
             <div class="panel-head">
               <div>
-                <h2>스마트 인사이트 요약</h2>
+                <h2>먼저 확인할 항목</h2>
                 <p>주요 수익성 및 점검 필요 사항</p>
               </div>
-              <span class="badge">INSIGHTS</span>
+              <span class="badge">REVIEW</span>
             </div>
             <div id="insights" class="insights"></div>
           </div>
