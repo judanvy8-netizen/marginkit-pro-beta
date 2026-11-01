@@ -37,7 +37,8 @@ const source = {
   parseNum: between('function parseNum(v) {', 'function norm(s) {'),
   norm: between('function norm(s) {', 'function findHeader(headers, aliases) {'),
   ingestSales: between('function ingestSalesRows(rows, map) {', 'function ingestCostRows(rows, map, baseCosts = state.costs) {'),
-  ingestCosts: between('function ingestCostRows(rows, map, baseCosts = state.costs) {', 'function getCost(p) {'),
+  ingestCosts: between('function ingestCostRows(rows, map, baseCosts = state.costs) {', 'function resolveProductCost('),
+  resolveCost: between('function resolveProductCost(', 'function getCost(p) {'),
   invalidate: between('function invalidateImportReads(type) {', 'function exitDemoMode() {'),
   setCost: between('function setCost(p, unitCost) {', '// --- Dashboard Rendering ---'),
   renderMappings: between('function renderMappings(containerId, headers, defs, map) {', 'function renderPreview(headers, rows, elId) {'),
@@ -94,7 +95,7 @@ function makeHarness({ emptyCostKey = false, isDemo = true } = {}) {
     chartMetric: 'revenue', sortColumn: 'revenue', sortAsc: false
   };
   const ctx = {
-    state, STORAGE_KEY_COSTS: COST_KEY, STORAGE_KEY_PRESET: PRESET_KEY,
+    state, premiumRules: [], STORAGE_KEY_COSTS: COST_KEY, STORAGE_KEY_PRESET: PRESET_KEY,
     fieldDefs: ['product', 'sku', 'revenue', 'qty', 'commission', 'shipping', 'ads', 'refunds', 'other'].map(key => ({ key })),
     costFieldDefs: ['product', 'sku', 'unitCost'].map(key => ({ key })),
     localStorage: {
@@ -132,7 +133,7 @@ function makeHarness({ emptyCostKey = false, isDemo = true } = {}) {
   };
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'exact-decimal.js'), 'utf8'), ctx);
-  vm.runInContext(source.parseNum + source.norm + source.loadCosts, ctx);
+  vm.runInContext(source.parseNum + source.norm + source.loadCosts + source.resolveCost, ctx);
   vm.runInContext("loadCostsFromStorage()", ctx);
   return { ctx, state, storage, storageOps, toastLog, elements, selects, pendingReads, baselineCosts: storage.get(COST_KEY) };
 }

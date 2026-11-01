@@ -11,6 +11,7 @@ const $$ = (s, root=document) => [...root.querySelectorAll(s)];
 // --- Local Storage Management ---
 const STORAGE_KEY_COSTS = 'marginkit_costs_v2';
 const STORAGE_KEY_PRESET = 'marginkit_map_preset_v2';
+let premiumRules = [];
 
 function loadCostsFromStorage() {
   try {
@@ -75,7 +76,7 @@ function persistCosts(costs, isDemo) {
   }
 }
 
-function calculationWithinBudget(transactions, costs) {
+function calculationWithinBudget(transactions, costs, rules = premiumRules) {
   const groups = new Map();
   const bounds = value => {
     const text = typeof value === 'number' ? MKDecimal.normalize(value) : String(value ?? '0');
@@ -95,7 +96,7 @@ function calculationWithinBudget(transactions, costs) {
   }
   let projected = 0;
   for (const group of groups.values()) {
-    const cost = (group.sku ? costs.get(`sku:${group.sku}`) : null) || costs.get(`name:${norm(group.product)}`);
+    const cost = resolveProductCost(group, costs, rules).cost;
     const rawLength = group.integer + group.scale + 2 + String(group.count).length - 1;
     const costSize = cost ? bounds(cost.unitCostExact ?? cost.unitCost) : { integer: 1, scale: 0 };
     const derivedLength = Math.max(rawLength, rawLength + costSize.integer + costSize.scale + 2);
@@ -428,7 +429,7 @@ function readFile(file, cb) {
 
 // --- Navigation ---
 function setPage(name, updateHash = true) {
-  const validPages = ['dashboard', 'import', 'products', 'results', 'simulator', 'settlement'];
+  const validPages = ['dashboard', 'import', 'products', 'results', 'simulator', 'settlement', 'premium'];
   if (!validPages.includes(name)) name = 'dashboard';
   if (updateHash && window.location.hash !== '#' + name) history.pushState(null, '', '#' + name);
   $('#demoModeNotice').classList.toggle('hidden', !state.isDemo);
@@ -439,6 +440,7 @@ function setPage(name, updateHash = true) {
   if (name === 'dashboard') renderDashboard();
   if (name === 'products') renderProducts();
   if (name === 'results') renderResults();
+  if (typeof CustomEvent === 'function') document.dispatchEvent(new CustomEvent('marginkit:change'));
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -528,10 +530,19 @@ function ingestCostRows(rows, map, baseCosts = state.costs) {
   return { ok: false, added: 0, costs, error: '원가 파일에서 유효한 상품과 원가를 찾지 못했습니다.' };
 }
 
+function resolveProductCost(p, costs, rules) {
+  const skuKey = p.sku ? `sku:${p.sku}` : '';
+  if (skuKey && costs.has(skuKey)) return { cost: costs.get(skuKey), status: 'sku', costKey: skuKey };
+  const nameKey = `name:${norm(p.product)}`;
+  if (costs.has(nameKey)) return { cost: costs.get(nameKey), status: 'name', costKey: nameKey };
+  const core = globalThis.MarginKitPremiumCore;
+  if (!core || !rules || (Array.isArray(rules) && !rules.length)) return { cost: null, status: 'none' };
+  const match = Array.isArray(rules) ? core.matchRules(p, rules, costs) : core.matchCompiled(p, rules, costs);
+  return { ...match, cost: match.status === 'matched' ? costs.get(match.costKey) : null };
+}
+
 function getCost(p) {
-  let c = p.sku ? state.costs.get(`sku:${p.sku}`) : null;
-  if (!c) c = state.costs.get(`name:${norm(p.product)}`);
-  return c ?? null;
+  return resolveProductCost(p, state.costs, state.isDemo ? [] : premiumRules).cost;
 }
 
 function aggregate() {
@@ -607,7 +618,7 @@ function setCost(p, unitCost) {
 
 function removeRegisteredCost(key) {
   if (!state.costs.has(key)) {
-    toast('이 행은 공통 상품명 원가를 사용합니다. 삭제할 개별 원가는 없습니다. 상품명 기준 원가 행에서 직접 관리해 주세요.');
+    toast('이 행은 공통 상품명 또는 자동 규칙의 원가를 사용합니다 삭제할 개별 원가는 없습니다 기준 원가 행이나 Premium 원가 규칙에서 관리해 주세요');
     return false;
   }
   const nextCosts = new Map(state.costs);
@@ -918,7 +929,7 @@ function renderProducts() {
               <td>
                 <span class="product-name" title="${esc(p.product)}">${esc(p.product)}</span>
                 ${p.sku ? `<span class="product-code">${esc(p.sku)}</span>` : ''}
-                ${p.hasCost && !state.costs.has(p.key) ? '<span class="tiny muted">공통 상품명 원가 적용 · 수정 시 개별 SKU 원가 등록</span>' : !p.sku ? '<span class="tiny muted">상품명 기준 원가 · 같은 상품명의 SKU에도 적용될 수 있음</span>' : ''}
+                ${p.hasCost && !state.costs.has(p.key) ? '<span class="tiny muted">상품명 또는 자동 규칙 원가 적용 · 수정 시 개별 원가 등록</span>' : !p.sku ? '<span class="tiny muted">상품명 기준 원가 · 같은 상품명의 SKU에도 적용될 수 있음</span>' : ''}
               </td>
               <td class="num">${p.isFromSales ? MKDecimal.format(p.qty) : '<span class="muted">— (정산 없음)</span>'}</td>
               <td>
@@ -1877,6 +1888,32 @@ window.addEventListener('keydown', e => {
     closeAddProductModal();
   }
 });
+
+// A narrow, copied-data interface for the device-local Premium tools
+globalThis.MarginKitApp = {
+  navigate: setPage,
+  snapshot() {
+    const totals = totalUp();
+    return JSON.parse(JSON.stringify({ isDemo: state.isDemo, source: state.salesFileName,
+      totals, costs: [...state.costs], matches: totals.products.map(p => ({ key: p.key,
+        product: p.product, sku: p.sku, ...resolveProductCost(p, state.costs, state.isDemo ? [] : premiumRules) })) }));
+  },
+  checkRules(rules) {
+    if (!globalThis.MarginKitPremiumCore) throw new Error('원가 규칙 모듈을 사용할 수 없습니다');
+    const checked = globalThis.MarginKitPremiumCore.compileRules(rules);
+    if (!calculationWithinBudget(state.transactions, state.costs, checked)) throw new Error('규칙 적용 후 계산 데이터가 처리 한도를 초과합니다');
+    return checked;
+  },
+  previewRules(rules) {
+    const checked = this.checkRules(rules);
+    return totalUp().products.map(p => ({ product: p.product, sku: p.sku,
+      ...resolveProductCost(p, state.costs, checked) }));
+  },
+  installRules(rules) {
+    premiumRules = this.checkRules(rules);
+    renderDashboard(); renderProducts(); renderResults();
+  }
+};
 
 // Initial boot
 renderDashboard();

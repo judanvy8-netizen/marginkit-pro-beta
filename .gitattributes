@@ -1,0 +1,2 @@
+# Preserve the verified upstream bytes of the bundled SheetJS dependency
+vendor/xlsx-0.20.3.full.min.js text eol=lf

@@ -499,6 +499,43 @@
     settlementRows.addEventListener('change', () => { renderSettlement(); save(); });
     renderSettlementInputs(); renderSettlement(); renderSimulator();
     if (loaded.migrated) save();
+    api.current = {
+      readSimulator() {
+        renderSimulator();
+        const copy = cleanDraft(draft).simulator;
+        try { calculateSimulator(copy); } catch (_) { throw new Error('현재 시뮬레이터 입력을 확인해 주세요 시뮬레이터 화면의 잘못된 항목을 수정한 뒤 저장할 수 있습니다'); }
+        return copy;
+      },
+      readSettlement() {
+        readSettlement();
+        const copy = cleanDraft(draft).settlement;
+        try { calculateSettlement(copy); } catch (_) { throw new Error('현재 수기 정산 입력을 확인해 주세요 채널별 매출과 요율을 수정한 뒤 저장할 수 있습니다'); }
+        return copy;
+      },
+      read() {
+        renderSimulator(); readSettlement();
+        const copy = cleanDraft(draft);
+        calculateSimulator(copy.simulator); calculateSettlement(copy.settlement);
+        return copy;
+      },
+      loadSimulator(value) { return applySaved({ simulator: value }); },
+      loadSettlement(value) { return applySaved({ settlement: value }); }
+    };
+    function applySaved(part) {
+      const next = cleanDraft({ ...draft, ...part });
+      if (part.simulator) calculateSimulator(next.simulator);
+      if (part.settlement) calculateSettlement(next.settlement);
+      if (!saveDraft(storage, next, { replaceFrom: draft })) throw new Error('현재 초안을 저장하지 못해 불러오지 않았습니다 다른 탭의 변경이나 브라우저 저장 공간을 확인해 주세요');
+      Object.assign(draft, next);
+      SIM_KEYS.forEach(key => simFields[key].value = draft.simulator[key]);
+      simFields.platform.value = draft.simulator.platform; reserveToggle.checked = draft.simulator.reserveEnabled;
+      renderSettlementInputs(); renderSettlement(); renderSimulator();
+      return true;
+    }
+    for (const host of [simHost, settleHost]) {
+      const entry = el('a', 'suite-premium-entry', host === simHost ? '이 시나리오를 저장하고 비교하기 →' : '월별 기록을 저장하고 비교하기 →');
+      entry.href = '#premium'; entry.dataset.pageLink = 'premium'; host.append(entry);
+    }
   }
   const api = { mount, calculateSimulator, calculateSettlement, recommendedPrice, exactTargetPrice, makeCsv, simulatorExport, settlementExport, simulatorSummary, settlementSummary, defaults, cleanDraft, migrateLegacy, loadDraft, saveDraft, DRAFT_KEY, LEGACY_KEY };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -4,7 +4,7 @@ const source=fs.readFileSync(process.env.APP_SOURCE||path.join(root,'app.js'),'u
 const between=(a,b)=>source.slice(source.indexOf(a),source.indexOf(b,source.indexOf(a)));
 const state={costs:new Map(),transactions:[],products:[],sortColumn:'revenue',sortAsc:false,isDemo:false};
 const downloads=[];const storage=new Map();
-const ctx=vm.createContext({state,MKDecimal:D,TextEncoder,Date,STORAGE_KEY_COSTS:'costs',toast(){},downloadBlob:(text,name,type)=>downloads.push({text,name,type}),localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},console});
+const ctx=vm.createContext({state,premiumRules:[],MKDecimal:D,TextEncoder,Date,STORAGE_KEY_COSTS:'costs',toast(){},downloadBlob:(text,name,type)=>downloads.push({text,name,type}),localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},console});
 vm.runInContext(between('function loadCostsFromStorage()', 'function restoreCostsFromStorage()')+
  between('function parseNum(v)', 'function findHeader(')+
  between('function ingestSalesRows(rows, map)', '// --- Dashboard Rendering ---')+

@@ -1,5 +1,7 @@
 {
   "name": "marginkit-pro-beta",
   "private": true,
-  "scripts": { "test": "node tests/import-regression.mjs && node tests/security-regression.mjs && node tests/worker-regression.mjs && node tests/suite-regression.cjs && node tests/cost-export-regression.mjs && node tests/cost-restore-regression.mjs && node tests/decimal-core-regression.cjs && node tests/suite-decimal-regression.cjs" }
+  "scripts": {
+    "test": "node tests/import-regression.mjs && node tests/security-regression.mjs && node tests/worker-regression.mjs && node tests/suite-regression.cjs && node tests/cost-export-regression.mjs && node tests/cost-restore-regression.mjs && node tests/decimal-core-regression.cjs && node tests/suite-decimal-regression.cjs && node --test tests/premium-core-regression.cjs && node --test tests/premium-export-regression.cjs && node tests/premium-integration-regression.cjs"
+  }
 }

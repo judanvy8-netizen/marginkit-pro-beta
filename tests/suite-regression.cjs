@@ -155,7 +155,7 @@ function createDOM() {
   const ids = new Map();
   function matches(node, selector) {
     if (selector.includes(',')) return selector.split(',').some(part => matches(node, part));
-    if (selector === 'input' || selector === 'select' || selector === 'button') return node.tagName === selector;
+    if (/^[a-z]+$/.test(selector)) return node.tagName === selector;
     const attribute = selector.match(/^\[data-([\w-]+)="([^"]+)"\]$/);
     return attribute && node.dataset[attribute[1]] === attribute[2];
   }
@@ -215,7 +215,7 @@ test('malicious settlement labels remain literal text and preserve edit focus', 
   const view = mountDOM(); const field = view.get('suite-row-0-channel');
   field.value = '<img src=x onerror=alert(1)>'; view.get('suite-settlement-rows').dispatch('input');
   assert.equal(view.get('suite-row-0-channel'), field);
-  const table = view.get('page-settlement').children.at(-1).children.at(-1).children[0];
+  const table = view.get('page-settlement').querySelector('table');
   const firstCell = table.children[1].children[0].children[0];
   assert.equal(firstCell.textContent, field.value); assert.equal(firstCell.children.length, 0);
 });

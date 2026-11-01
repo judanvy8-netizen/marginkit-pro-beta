@@ -9,11 +9,11 @@ function harness({demo=false,writeFail=false}={}) {
  const state={isDemo:demo,costs:new Map([item('OLD',20)])};
  let stored=JSON.stringify([...state.costs]);const notices=[],elements=new Map();let writes=0,renders=0;
  const $=id=>{if(!elements.has(id))elements.set(id,{value:'',textContent:'',disabled:false,focus(){},classList:{add(){},remove(){}}});return elements.get(id);};
- const ctx=vm.createContext({state,$,TextEncoder,Date,STORAGE_KEY_COSTS:'costs',toast:x=>notices.push(x),
+ const ctx=vm.createContext({state,premiumRules:[],$,TextEncoder,Date,STORAGE_KEY_COSTS:'costs',toast:x=>notices.push(x),
  localStorage:{getItem(){return stored;},setItem(k,v){if(writeFail)throw Error('QuotaExceededError');stored=v;writes++;}},
  renderProducts(){renders++;},renderDashboard(){},renderResults(){}});
  vm.runInContext(fs.readFileSync(new URL('../exact-decimal.js',import.meta.url),'utf8'),ctx);
- vm.runInContext(between('function loadCostsFromStorage()', 'function restoreCostsFromStorage()')+between('function parseNum(v)', 'function findHeader(')+between('// --- Validated, non-destructive JSON cost restoration ---','// --- Add Product Modal Handlers ---'),ctx);
+ vm.runInContext(between('function loadCostsFromStorage()', 'function restoreCostsFromStorage()')+between('function parseNum(v)', 'function findHeader(')+between('function resolveProductCost(', 'function getCost(p) {')+between('// --- Validated, non-destructive JSON cost restoration ---','// --- Add Product Modal Handlers ---'),ctx);
  ctx.loadCostsFromStorage();
  return {ctx,state,$,notices,get stored(){return stored;},set stored(v){stored=v;},get writes(){return writes;},get renders(){return renders;}};
 }
